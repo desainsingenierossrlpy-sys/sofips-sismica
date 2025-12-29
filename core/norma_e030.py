@@ -4,6 +4,7 @@ from .base_seismic_code import SeismicCode
 class NormaE030(SeismicCode):
     def __init__(self):
         super().__init__("NTE E.030 (2018/2025)", "Perú")
+        # Datos del PDF (Zonas y Suelos)
         self.zonas = {4: 0.45, 3: 0.35, 2: 0.25, 1: 0.10}
         self.factor_S = {
             'S0': {4: 0.80, 3: 0.80, 2: 0.80, 1: 0.80},
@@ -17,15 +18,17 @@ class NormaE030(SeismicCode):
             'S2': {'TP': 0.6, 'TL': 2.0},
             'S3': {'TP': 1.0, 'TL': 1.6}
         }
-        self.categorias = {'A1': 1.0, 'A2': 1.5, 'B': 1.3, 'C': 1.0}
+        self.categorias = {'A1': 1.0, 'A2': 1.5, 'B': 1.3, 'C': 1.0} 
 
     def _calcular_C(self, T, TP, TL):
+        # Lógica Tabla N°6 del PDF
         if T < 0.2 * TP: return 1 + 7.5 * (T / TP)
         elif T <= TP: return 2.5
         elif T < TL: return 2.5 * (TP / T)
         else: return 2.5 * (TP * TL) / (T**2)
 
     def get_spectrum_curve(self, params, T_max=6.0, dt=0.01):
+        # Validación
         if params['zona'] not in self.zonas: params['zona'] = 4
         
         Z = self.zonas[params['zona']]
@@ -36,20 +39,11 @@ class NormaE030(SeismicCode):
         R = params['R_coef']
 
         T_vals = np.arange(0, T_max + dt, dt)
-        Sa_design = [] # Espectro reducido (Diseño)
-        Sa_elastic = [] # Espectro elástico (Sismo Severo R=1)
-
+        Sa_vals = []
         for T in T_vals:
             C = self._calcular_C(T, TP, TL)
+            # FÓRMULA EN FRACCIÓN DE G (Sin multiplicar por 9.81 aquí)
+            sa = (Z * U * C * S) / R 
+            Sa_vals.append(sa)
             
-            # Espectro Elástico (R=1 teórico, sin reducción)
-            # Representa la energía real del sismo entrando al edificio
-            sa_el = (Z * U * C * S * 9.81) 
-            
-            # Espectro de Diseño (Reducido por R)
-            sa_des = sa_el / R
-            
-            Sa_elastic.append(sa_el)
-            Sa_design.append(sa_des)
-            
-        return T_vals, np.array(Sa_design), np.array(Sa_elastic), {"Z": Z, "S": S, "TP": TP, "TL": TL, "U": U}
+        return T_vals, np.array(Sa_vals), {"Z": Z, "S": S, "TP": TP, "TL": TL, "U": U}
