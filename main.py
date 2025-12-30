@@ -3,45 +3,22 @@ import pandas as pd
 import plotly.graph_objects as go
 import os 
 import base64 
+import io # <--- IMPORTANTE PARA LA IMAGEN
 from ui.map_selector import mostrar_mapa_selector
 from core.norma_e030 import NormaE030
+from ui.pdf_report import create_pdf
 
-# 1. Configuración de la página
 st.set_page_config(page_title="SOFIPS | Ingeniería Sísmica", layout="wide", page_icon="🏗️")
 
-# --- CSS GLOBAL: CURSOR Y MÉTRICAS PERSONALIZADAS ---
 st.markdown("""
 <style>
-/* Cursor en el mapa */
-.st-emotion-cache-16cqk79, .leaflet-container, .leaflet-grab, .leaflet-interactive { 
-    cursor: crosshair !important; 
-}
-/* Estilo para las cajitas de parámetros (Más pequeñas y elegantes) */
-.custom-metric {
-    background-color: #f9f9f9;
-    border: 1px solid #e0e0e0;
-    border-radius: 5px;
-    padding: 8px;
-    text-align: center;
-    margin-bottom: 10px;
-}
-.metric-label {
-    font-size: 12px;
-    color: #666;
-    margin: 0;
-    text-transform: uppercase;
-    font-weight: 600;
-}
-.metric-value {
-    font-size: 20px; /* Tamaño controlado (antes era gigante) */
-    font-weight: bold;
-    color: #2C3E50;
-    margin: 0;
-}
+.st-emotion-cache-16cqk79, .leaflet-container, .leaflet-grab, .leaflet-interactive { cursor: crosshair !important; }
+.custom-metric { background-color: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 5px; padding: 8px; text-align: center; margin-bottom: 10px; }
+.metric-label { font-size: 12px; color: #666; margin: 0; text-transform: uppercase; font-weight: 600; }
+.metric-value { font-size: 20px; font-weight: bold; color: #2C3E50; margin: 0; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- HEADER (LOGO + TÍTULO) ---
 c_logo, c_text = st.columns([0.25, 0.75]) 
 with c_logo:
     logo_path = "assets/logo.png"
@@ -60,16 +37,13 @@ with c_text:
 
 st.markdown("---")
 
-# --- LAYOUT PRINCIPAL ---
 col_izq, col_der = st.columns([1, 1.3], gap="large")
 
-# COLUMNA IZQUIERDA: MAPA
 with col_izq:
     lat, lon, direccion, depto = mostrar_mapa_selector()
     if lat:
         st.success(f"📍 **Ubicación:** {direccion}")
         
-        # Automatización de Zonas
         MAPPING_ZONAS = {
             'TUMBES': 4, 'PIURA': 4, 'LAMBAYEQUE': 4, 'LA LIBERTAD': 4, 'ANCASH': 4, 
             'LIMA': 4, 'CALLAO': 4, 'ICA': 4, 'AREQUIPA': 4, 'MOQUEGUA': 4, 'TACNA': 4,
@@ -84,23 +58,19 @@ with col_izq:
                 st.session_state["zona_seleccionada"] = MAPPING_ZONAS.get(depto, 4)
                 st.rerun()
 
-# COLUMNA DERECHA: DATOS
 with col_der:
     st.subheader("⚙️ Parámetros de Diseño")
     
-    # Fila 1: Inputs
     c1, c2, c3 = st.columns(3)
     if "zona_seleccionada" not in st.session_state: st.session_state["zona_seleccionada"] = 4
     zona = c1.selectbox("Zona (Z)", [4, 3, 2, 1], key="zona_seleccionada")
     suelo = c2.selectbox("Suelo (S)", ["S0", "S1", "S2", "S3"], index=1)
     cat = c3.selectbox("Uso (U)", ["A1", "A2", "B", "C"], index=2)
 
-    # Fila 2: Coeficientes R
     c4, c5 = st.columns(2)
     rx = c4.number_input("R Coeficiente (Dir X)", value=8.0, step=0.5)
     ry = c5.number_input("R Coeficiente (Dir Y)", value=6.0, step=0.5)
 
-    # Fila 3: UNIDADES
     st.write("📏 **Unidades de Salida**")
     unidad = st.radio("Seleccione unidad para Gráfica y Tablas:", ["g (Fracción de Gravedad)", "m/s²"], horizontal=True)
     factor_g = 9.81 if unidad == "m/s²" else 1.0
@@ -111,27 +81,21 @@ with col_der:
     if ejecutar:
         norma = NormaE030()
         
-        # 1. Obtener datos crudos (en g)
         Tx, Sa_x_des_raw, Sa_el_raw, info = norma.get_spectrum_curve({'zona': zona, 'suelo': suelo, 'categoria': cat, 'R_coef': rx})
         _, Sa_y_des_raw, _, _ = norma.get_spectrum_curve({'zona': zona, 'suelo': suelo, 'categoria': cat, 'R_coef': ry})
 
-        # 2. Convertir unidades
         Sa_el = Sa_el_raw * factor_g
         Sa_x_des = Sa_x_des_raw * factor_g
         Sa_y_des = Sa_y_des_raw * factor_g
 
-        # 3. MOSTRAR RESUMEN (DISEÑO MEJORADO COMPACTO)
         st.markdown("### 📝 Resumen de Parámetros (E.030)")
         p1, p2, p3, p4, p5 = st.columns(5)
-        
-        # Usamos HTML inyectado para control total del tamaño
         p1.markdown(f'<div class="custom-metric"><p class="metric-label">Factor Z</p><p class="metric-value">{info["Z"]}g</p></div>', unsafe_allow_html=True)
         p2.markdown(f'<div class="custom-metric"><p class="metric-label">Factor U</p><p class="metric-value">{info["U"]}</p></div>', unsafe_allow_html=True)
         p3.markdown(f'<div class="custom-metric"><p class="metric-label">Factor S</p><p class="metric-value">{info["S"]}</p></div>', unsafe_allow_html=True)
         p4.markdown(f'<div class="custom-metric"><p class="metric-label">Periodo TP</p><p class="metric-value">{info["TP"]} s</p></div>', unsafe_allow_html=True)
         p5.markdown(f'<div class="custom-metric"><p class="metric-label">Periodo TL</p><p class="metric-value">{info["TL"]} s</p></div>', unsafe_allow_html=True)
 
-        # 4. Gráfico
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=Tx, y=Sa_el, mode='lines', line=dict(color='red', width=2, dash='dash'), name='Espectro Elástico (R=1)'))
         fig.add_trace(go.Scatter(x=Tx, y=Sa_x_des, mode='lines', fill='tonexty', fillcolor='rgba(255, 0, 0, 0.15)', line=dict(color='black', width=3), name=f'Diseño X-X (R={rx})'))
@@ -146,20 +110,42 @@ with col_der:
         )
         st.plotly_chart(fig, use_container_width=True)
 
-        # 5. Tablas y Descargas
-        with st.expander("📋 Ver Tabla de Datos y Descargar"):
+        with st.expander("📋 Ver Tabla de Datos y Descargar", expanded=True):
             df = pd.DataFrame({
                 "T (s)": Tx,
                 f"Sa Elástico ({unidad})": Sa_el,
                 f"Sa Diseño X ({unidad})": Sa_x_des,
                 f"Sa Diseño Y ({unidad})": Sa_y_des
             })
-            st.dataframe(df, use_container_width=True)
+            st.dataframe(df, use_container_width=True, height=250)
             
-            # Descargas TXT
+            col_d1, col_d2, col_d3 = st.columns([1, 1, 1.5])
+            
             txt_x = df.iloc[:, [0, 2]].to_csv(sep='\t', index=False, header=False).encode('utf-8')
             txt_y = df.iloc[:, [0, 3]].to_csv(sep='\t', index=False, header=False).encode('utf-8')
             
-            d1, d2 = st.columns(2)
-            d1.download_button(f"📥 TXT ETABS Dir X ({unidad})", txt_x, f"Espectro_X_{unidad}.txt", "text/plain")
-            d2.download_button(f"📥 TXT ETABS Dir Y ({unidad})", txt_y, f"Espectro_Y_{unidad}.txt", "text/plain")
+            col_d1.download_button(f"📥 ETABS Dir X (.txt)", txt_x, f"Espectro_X_{unidad}.txt", "text/plain")
+            col_d2.download_button(f"📥 ETABS Dir Y (.txt)", txt_y, f"Espectro_Y_{unidad}.txt", "text/plain")
+            
+            # --- GENERACIÓN DE PDF CON IMAGEN ---
+            # 1. Convertir el gráfico Plotly a Imagen en memoria (Bytes)
+            # scale=2 para mejor resolución
+            img_bytes = fig.to_image(format="png", width=800, height=400, scale=2)
+            
+            # 2. Crear un objeto temporal de imagen
+            img_stream = io.BytesIO(img_bytes)
+            
+            # 3. Pasar la imagen al generador
+            report_params = {
+                'suelo': suelo, 'categoria': cat, 'rx': rx, 'ry': ry, 
+                'unidad': unidad, 'direccion': direccion
+            }
+            pdf_bytes = create_pdf(report_params, info, direccion, df, img_stream)
+            
+            col_d3.download_button(
+                label="📄 Descargar Memoria de Cálculo (PDF)",
+                data=pdf_bytes,
+                file_name="Memoria_Calculo_SOFIPS.pdf",
+                mime="application/pdf",
+                type="primary" 
+            )

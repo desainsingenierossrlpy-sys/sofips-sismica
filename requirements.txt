@@ -7,3 +7,5 @@ streamlit-folium
 geopy
 unidecode
 openpyxl
+fpdf2
+kaleido
