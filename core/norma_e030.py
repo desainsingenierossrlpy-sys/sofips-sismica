@@ -1,6 +1,5 @@
 import numpy as np
-# CORRECCIÓN AQUÍ: Usamos ruta absoluta 'core.base...' en vez de '.base...'
-from core.base_seismic_code import SeismicCode 
+from core.base_seismic_code import SeismicCode
 
 class NormaE030(SeismicCode):
     def __init__(self):
@@ -39,8 +38,8 @@ class NormaE030(SeismicCode):
 
         T_vals = np.arange(0, T_max + dt, dt)
         
-        Sa_design = [] 
-        Sa_elastic = []
+        Sa_design = []  # Espectro reducido (Diseño)
+        Sa_elastic = [] # Espectro elástico (Sismo Severo R=1)
 
         for T in T_vals:
             C = self._calcular_C(T, TP, TL)
@@ -54,4 +53,5 @@ class NormaE030(SeismicCode):
             Sa_elastic.append(sa_el)
             Sa_design.append(sa_des)
             
+        # RETORNA 4 VALORES (IMPORTANTE PARA MAIN.PY)
         return T_vals, np.array(Sa_design), np.array(Sa_elastic), {"Z": Z, "S": S, "TP": TP, "TL": TL, "U": U}
