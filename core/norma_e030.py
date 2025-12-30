@@ -1,5 +1,6 @@
 import numpy as np
-from .base_seismic_code import SeismicCode
+# CORRECCIÓN AQUÍ: Usamos ruta absoluta 'core.base...' en vez de '.base...'
+from core.base_seismic_code import SeismicCode 
 
 class NormaE030(SeismicCode):
     def __init__(self):
@@ -21,14 +22,12 @@ class NormaE030(SeismicCode):
         self.categorias = {'A1': 1.0, 'A2': 1.5, 'B': 1.3, 'C': 1.0} 
 
     def _calcular_C(self, T, TP, TL):
-        # Lógica Tabla N°6 del PDF
         if T < 0.2 * TP: return 1 + 7.5 * (T / TP)
         elif T <= TP: return 2.5
         elif T < TL: return 2.5 * (TP / T)
         else: return 2.5 * (TP * TL) / (T**2)
 
     def get_spectrum_curve(self, params, T_max=6.0, dt=0.01):
-        # Validación
         if params['zona'] not in self.zonas: params['zona'] = 4
         
         Z = self.zonas[params['zona']]
@@ -39,11 +38,20 @@ class NormaE030(SeismicCode):
         R = params['R_coef']
 
         T_vals = np.arange(0, T_max + dt, dt)
-        Sa_vals = []
+        
+        Sa_design = [] 
+        Sa_elastic = []
+
         for T in T_vals:
             C = self._calcular_C(T, TP, TL)
-            # FÓRMULA EN FRACCIÓN DE G (Sin multiplicar por 9.81 aquí)
-            sa = (Z * U * C * S) / R 
-            Sa_vals.append(sa)
             
-        return T_vals, np.array(Sa_vals), {"Z": Z, "S": S, "TP": TP, "TL": TL, "U": U}
+            # 1. Espectro Elástico (en g puros)
+            sa_el = (Z * U * C * S)
+            
+            # 2. Espectro de Diseño (en g puros)
+            sa_des = sa_el / R
+            
+            Sa_elastic.append(sa_el)
+            Sa_design.append(sa_des)
+            
+        return T_vals, np.array(Sa_design), np.array(Sa_elastic), {"Z": Z, "S": S, "TP": TP, "TL": TL, "U": U}
