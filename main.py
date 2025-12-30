@@ -9,10 +9,35 @@ from core.norma_e030 import NormaE030
 # 1. Configuración de la página
 st.set_page_config(page_title="SOFIPS | Ingeniería Sísmica", layout="wide", page_icon="🏗️")
 
-# --- CSS GLOBAL: CURSOR ---
+# --- CSS GLOBAL: CURSOR Y MÉTRICAS PERSONALIZADAS ---
 st.markdown("""
 <style>
-.st-emotion-cache-16cqk79, .leaflet-container, .leaflet-grab, .leaflet-interactive { cursor: crosshair !important; }
+/* Cursor en el mapa */
+.st-emotion-cache-16cqk79, .leaflet-container, .leaflet-grab, .leaflet-interactive { 
+    cursor: crosshair !important; 
+}
+/* Estilo para las cajitas de parámetros (Más pequeñas y elegantes) */
+.custom-metric {
+    background-color: #f9f9f9;
+    border: 1px solid #e0e0e0;
+    border-radius: 5px;
+    padding: 8px;
+    text-align: center;
+    margin-bottom: 10px;
+}
+.metric-label {
+    font-size: 12px;
+    color: #666;
+    margin: 0;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+.metric-value {
+    font-size: 20px; /* Tamaño controlado (antes era gigante) */
+    font-weight: bold;
+    color: #2C3E50;
+    margin: 0;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -63,19 +88,19 @@ with col_izq:
 with col_der:
     st.subheader("⚙️ Parámetros de Diseño")
     
-    # Fila 1
+    # Fila 1: Inputs
     c1, c2, c3 = st.columns(3)
     if "zona_seleccionada" not in st.session_state: st.session_state["zona_seleccionada"] = 4
     zona = c1.selectbox("Zona (Z)", [4, 3, 2, 1], key="zona_seleccionada")
     suelo = c2.selectbox("Suelo (S)", ["S0", "S1", "S2", "S3"], index=1)
     cat = c3.selectbox("Uso (U)", ["A1", "A2", "B", "C"], index=2)
 
-    # Fila 2
+    # Fila 2: Coeficientes R
     c4, c5 = st.columns(2)
     rx = c4.number_input("R Coeficiente (Dir X)", value=8.0, step=0.5)
     ry = c5.number_input("R Coeficiente (Dir Y)", value=6.0, step=0.5)
 
-    # Fila 3: UNIDADES (MEJORA)
+    # Fila 3: UNIDADES
     st.write("📏 **Unidades de Salida**")
     unidad = st.radio("Seleccione unidad para Gráfica y Tablas:", ["g (Fracción de Gravedad)", "m/s²"], horizontal=True)
     factor_g = 9.81 if unidad == "m/s²" else 1.0
@@ -95,14 +120,16 @@ with col_der:
         Sa_x_des = Sa_x_des_raw * factor_g
         Sa_y_des = Sa_y_des_raw * factor_g
 
-        # 3. Mostrar Resumen de Parámetros (MEJORA)
+        # 3. MOSTRAR RESUMEN (DISEÑO MEJORADO COMPACTO)
         st.markdown("### 📝 Resumen de Parámetros (E.030)")
         p1, p2, p3, p4, p5 = st.columns(5)
-        p1.metric("Factor Z", f"{info['Z']}g")
-        p2.metric("Factor U", f"{info['U']}")
-        p3.metric("Factor S", f"{info['S']}")
-        p4.metric("TP", f"{info['TP']} s")
-        p5.metric("TL", f"{info['TL']} s")
+        
+        # Usamos HTML inyectado para control total del tamaño
+        p1.markdown(f'<div class="custom-metric"><p class="metric-label">Factor Z</p><p class="metric-value">{info["Z"]}g</p></div>', unsafe_allow_html=True)
+        p2.markdown(f'<div class="custom-metric"><p class="metric-label">Factor U</p><p class="metric-value">{info["U"]}</p></div>', unsafe_allow_html=True)
+        p3.markdown(f'<div class="custom-metric"><p class="metric-label">Factor S</p><p class="metric-value">{info["S"]}</p></div>', unsafe_allow_html=True)
+        p4.markdown(f'<div class="custom-metric"><p class="metric-label">Periodo TP</p><p class="metric-value">{info["TP"]} s</p></div>', unsafe_allow_html=True)
+        p5.markdown(f'<div class="custom-metric"><p class="metric-label">Periodo TL</p><p class="metric-value">{info["TL"]} s</p></div>', unsafe_allow_html=True)
 
         # 4. Gráfico
         fig = go.Figure()
