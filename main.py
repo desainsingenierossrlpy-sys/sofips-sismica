@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import os 
 import base64 
-import io # <--- IMPORTANTE PARA LA IMAGEN
+import io
 from ui.map_selector import mostrar_mapa_selector
 from core.norma_e030 import NormaE030
 from ui.pdf_report import create_pdf
@@ -64,7 +64,10 @@ with col_der:
     c1, c2, c3 = st.columns(3)
     if "zona_seleccionada" not in st.session_state: st.session_state["zona_seleccionada"] = 4
     zona = c1.selectbox("Zona (Z)", [4, 3, 2, 1], key="zona_seleccionada")
-    suelo = c2.selectbox("Suelo (S)", ["S0", "S1", "S2", "S3"], index=1)
+    
+    # ACTUALIZACIÓN: AGREGADO S4 A LA LISTA
+    suelo = c2.selectbox("Suelo (S)", ["S0", "S1", "S2", "S3", "S4"], index=1)
+    
     cat = c3.selectbox("Uso (U)", ["A1", "A2", "B", "C"], index=2)
 
     c4, c5 = st.columns(2)
@@ -84,68 +87,66 @@ with col_der:
         Tx, Sa_x_des_raw, Sa_el_raw, info = norma.get_spectrum_curve({'zona': zona, 'suelo': suelo, 'categoria': cat, 'R_coef': rx})
         _, Sa_y_des_raw, _, _ = norma.get_spectrum_curve({'zona': zona, 'suelo': suelo, 'categoria': cat, 'R_coef': ry})
 
-        Sa_el = Sa_el_raw * factor_g
-        Sa_x_des = Sa_x_des_raw * factor_g
-        Sa_y_des = Sa_y_des_raw * factor_g
+        # DETECCIÓN DE ERROR NORMATIVO (Z4 + S4)
+        if info['Error']:
+            st.error(info['Error'])
+        else:
+            Sa_el = Sa_el_raw * factor_g
+            Sa_x_des = Sa_x_des_raw * factor_g
+            Sa_y_des = Sa_y_des_raw * factor_g
 
-        st.markdown("### 📝 Resumen de Parámetros (E.030)")
-        p1, p2, p3, p4, p5 = st.columns(5)
-        p1.markdown(f'<div class="custom-metric"><p class="metric-label">Factor Z</p><p class="metric-value">{info["Z"]}g</p></div>', unsafe_allow_html=True)
-        p2.markdown(f'<div class="custom-metric"><p class="metric-label">Factor U</p><p class="metric-value">{info["U"]}</p></div>', unsafe_allow_html=True)
-        p3.markdown(f'<div class="custom-metric"><p class="metric-label">Factor S</p><p class="metric-value">{info["S"]}</p></div>', unsafe_allow_html=True)
-        p4.markdown(f'<div class="custom-metric"><p class="metric-label">Periodo TP</p><p class="metric-value">{info["TP"]} s</p></div>', unsafe_allow_html=True)
-        p5.markdown(f'<div class="custom-metric"><p class="metric-label">Periodo TL</p><p class="metric-value">{info["TL"]} s</p></div>', unsafe_allow_html=True)
+            st.markdown("### 📝 Resumen de Parámetros (E.030)")
+            p1, p2, p3, p4, p5 = st.columns(5)
+            p1.markdown(f'<div class="custom-metric"><p class="metric-label">Factor Z</p><p class="metric-value">{info["Z"]}g</p></div>', unsafe_allow_html=True)
+            p2.markdown(f'<div class="custom-metric"><p class="metric-label">Factor U</p><p class="metric-value">{info["U"]}</p></div>', unsafe_allow_html=True)
+            p3.markdown(f'<div class="custom-metric"><p class="metric-label">Factor S</p><p class="metric-value">{info["S"]}</p></div>', unsafe_allow_html=True)
+            p4.markdown(f'<div class="custom-metric"><p class="metric-label">Periodo TP</p><p class="metric-value">{info["TP"]} s</p></div>', unsafe_allow_html=True)
+            p5.markdown(f'<div class="custom-metric"><p class="metric-label">Periodo TL</p><p class="metric-value">{info["TL"]} s</p></div>', unsafe_allow_html=True)
 
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=Tx, y=Sa_el, mode='lines', line=dict(color='red', width=2, dash='dash'), name='Espectro Elástico (R=1)'))
-        fig.add_trace(go.Scatter(x=Tx, y=Sa_x_des, mode='lines', fill='tonexty', fillcolor='rgba(255, 0, 0, 0.15)', line=dict(color='black', width=3), name=f'Diseño X-X (R={rx})'))
-        fig.add_trace(go.Scatter(x=Tx, y=Sa_y_des, mode='lines', line=dict(color='blue', width=2), name=f'Diseño Y-Y (R={ry})'))
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=Tx, y=Sa_el, mode='lines', line=dict(color='red', width=2, dash='dash'), name='Espectro Elástico (R=1)'))
+            fig.add_trace(go.Scatter(x=Tx, y=Sa_x_des, mode='lines', fill='tonexty', fillcolor='rgba(255, 0, 0, 0.15)', line=dict(color='black', width=3), name=f'Diseño X-X (R={rx})'))
+            fig.add_trace(go.Scatter(x=Tx, y=Sa_y_des, mode='lines', line=dict(color='blue', width=2), name=f'Diseño Y-Y (R={ry})'))
 
-        fig.update_layout(
-            title=dict(text=f"<b>ESPECTRO E.030 ({label_eje})</b>", font=dict(size=16)),
-            xaxis=dict(title="Periodo T (s)", showgrid=True, gridcolor='lightgray'),
-            yaxis=dict(title=label_eje, showgrid=True, gridcolor='lightgray'),
-            template="plotly_white", height=500, hovermode="x unified",
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-        with st.expander("📋 Ver Tabla de Datos y Descargar", expanded=True):
-            df = pd.DataFrame({
-                "T (s)": Tx,
-                f"Sa Elástico ({unidad})": Sa_el,
-                f"Sa Diseño X ({unidad})": Sa_x_des,
-                f"Sa Diseño Y ({unidad})": Sa_y_des
-            })
-            st.dataframe(df, use_container_width=True, height=250)
-            
-            col_d1, col_d2, col_d3 = st.columns([1, 1, 1.5])
-            
-            txt_x = df.iloc[:, [0, 2]].to_csv(sep='\t', index=False, header=False).encode('utf-8')
-            txt_y = df.iloc[:, [0, 3]].to_csv(sep='\t', index=False, header=False).encode('utf-8')
-            
-            col_d1.download_button(f"📥 ETABS Dir X (.txt)", txt_x, f"Espectro_X_{unidad}.txt", "text/plain")
-            col_d2.download_button(f"📥 ETABS Dir Y (.txt)", txt_y, f"Espectro_Y_{unidad}.txt", "text/plain")
-            
-            # --- GENERACIÓN DE PDF CON IMAGEN ---
-            # 1. Convertir el gráfico Plotly a Imagen en memoria (Bytes)
-            # scale=2 para mejor resolución
-            img_bytes = fig.to_image(format="png", width=800, height=400, scale=2)
-            
-            # 2. Crear un objeto temporal de imagen
-            img_stream = io.BytesIO(img_bytes)
-            
-            # 3. Pasar la imagen al generador
-            report_params = {
-                'suelo': suelo, 'categoria': cat, 'rx': rx, 'ry': ry, 
-                'unidad': unidad, 'direccion': direccion
-            }
-            pdf_bytes = create_pdf(report_params, info, direccion, df, img_stream)
-            
-            col_d3.download_button(
-                label="📄 Descargar Memoria de Cálculo (PDF)",
-                data=pdf_bytes,
-                file_name="Memoria_Calculo_SOFIPS.pdf",
-                mime="application/pdf",
-                type="primary" 
+            fig.update_layout(
+                title=dict(text=f"<b>ESPECTRO E.030 ({label_eje})</b>", font=dict(size=16)),
+                xaxis=dict(title="Periodo T (s)", showgrid=True, gridcolor='lightgray'),
+                yaxis=dict(title=label_eje, showgrid=True, gridcolor='lightgray'),
+                template="plotly_white", height=500, hovermode="x unified",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
             )
+            st.plotly_chart(fig, use_container_width=True)
+
+            with st.expander("📋 Ver Tabla de Datos y Descargar", expanded=True):
+                df = pd.DataFrame({
+                    "T (s)": Tx,
+                    f"Sa Elástico ({unidad})": Sa_el,
+                    f"Sa Diseño X ({unidad})": Sa_x_des,
+                    f"Sa Diseño Y ({unidad})": Sa_y_des
+                })
+                st.dataframe(df, use_container_width=True, height=250)
+                
+                col_d1, col_d2, col_d3 = st.columns([1, 1, 1.5])
+                
+                txt_x = df.iloc[:, [0, 2]].to_csv(sep='\t', index=False, header=False).encode('utf-8')
+                txt_y = df.iloc[:, [0, 3]].to_csv(sep='\t', index=False, header=False).encode('utf-8')
+                
+                col_d1.download_button(f"📥 ETABS Dir X (.txt)", txt_x, f"Espectro_X_{unidad}.txt", "text/plain")
+                col_d2.download_button(f"📥 ETABS Dir Y (.txt)", txt_y, f"Espectro_Y_{unidad}.txt", "text/plain")
+                
+                img_bytes = fig.to_image(format="png", width=800, height=400, scale=2)
+                img_stream = io.BytesIO(img_bytes)
+                
+                report_params = {
+                    'suelo': suelo, 'categoria': cat, 'rx': rx, 'ry': ry, 
+                    'unidad': unidad, 'direccion': direccion
+                }
+                pdf_bytes = create_pdf(report_params, info, direccion, df, img_stream)
+                
+                col_d3.download_button(
+                    label="📄 Descargar Memoria de Cálculo (PDF)",
+                    data=pdf_bytes,
+                    file_name="Memoria_Calculo_SOFIPS.pdf",
+                    mime="application/pdf",
+                    type="primary" 
+                )
