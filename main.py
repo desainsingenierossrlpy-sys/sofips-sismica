@@ -25,14 +25,12 @@ a.leaflet-control-zoom-in, a.leaflet-control-zoom-out, a.leaflet-control-layers-
 # --- SISTEMA DE VENTANAS EMERGENTES (MODALES) ---
 @st.dialog("📘 Referencia Normativa")
 def ver_imagen_grande(path, caption):
-    """Abre una ventana modal grande con la imagen"""
     if os.path.exists(path):
         st.image(path, caption=caption, use_container_width=True)
     else:
         st.error(f"⚠️ Falta la imagen: {path}")
 
 def boton_ayuda(path, label, key_suffix):
-    """Crea un botón pequeño que abre el modal"""
     if st.button(f"👁️ {label}", key=f"btn_{key_suffix}", help="Clic para ver la tabla en grande"):
         ver_imagen_grande(path, label)
 
@@ -47,7 +45,7 @@ with st.sidebar:
     pais_seleccionado = st.selectbox("📍 Normativa / País", list(manager.available_codes.keys()))
     st.markdown("### 🛠️ Herramientas")
     modulo = st.radio("Seleccione módulo:", ["Espectro de Diseño", "Verificación E.030 (ETABS)"])
-    st.info("v2.8 Enterprise Cloud")
+    st.info("v2.9 Enterprise Cloud")
 
 # HEADER
 logo_header = "assets/logo.png"
@@ -96,31 +94,23 @@ if modulo == "Espectro de Diseño":
         with col_der:
             st.subheader("⚙️ Parámetros de Diseño")
             
-            # --- ZONA ---
             c1, c2, c3 = st.columns(3)
             if "zona_seleccionada" not in st.session_state: st.session_state["zona_seleccionada"] = 4
             with c1:
                 zona = st.selectbox("Zona (Z)", [4, 3, 2, 1], key="zona_seleccionada")
-                # BOTÓN NUEVO: VER MAPA E.030
-                boton_ayuda("assets/mapa_zonas.png", "Mapa E.030", "zona")
+                boton_ayuda("assets/tabla_zonas.png", "Mapa Zonas", "zona")
 
-            # --- SUELO ---
             with c2:
                 suelo = st.selectbox("Suelo (S)", list(norma.factor_S.keys()), index=1)
-                # BOTÓN NUEVO: VER TABLA SUELOS (Pop-up grande)
                 boton_ayuda("assets/tabla_suelos.png", "Perfiles Suelo", "suelo")
 
-            # --- CATEGORIA ---
             def update_u(): st.session_state.u_val = norma.categorias[st.session_state.cat_key]
             with c3:
                 cat_sel = st.selectbox("Cat. (U)", list(norma.categorias.keys()), index=2, key="cat_key", on_change=update_u)
                 boton_ayuda("assets/tabla_categorias.png", "Categorías", "cat")
             
-            # U Editable
             st.write("**Factor U (Editable):**")
             u_final = st.number_input("Valor U", value=st.session_state.u_val, format="%.2f", step=0.1, label_visibility="collapsed")
-            
-            # Botón extra para tabla de S, TP, TL
             boton_ayuda("assets/tabla_parametros_suelo.png", "Tabla Factores S, TP, TL", "params")
 
             st.markdown("---")
@@ -162,13 +152,11 @@ if modulo == "Espectro de Diseño":
                     st.session_state.ip_y = norma.irregularidad_planta[st.session_state.ip_y_key]
                 
                 st.selectbox("Sistema Estructural Y", list(norma.sistemas_estructurales.keys()), index=5, key="sis_y_key", on_change=update_ry)
-                
                 c_iay, c_ipy = st.columns(2)
-                with c_iay:
-                    st.selectbox("Irregularidad Altura (Ia)", list(norma.irregularidad_altura.keys()), key="ia_y_key", on_change=update_ry)
-                with c_ipy:
-                    st.selectbox("Irregularidad Planta (Ip)", list(norma.irregularidad_planta.keys()), key="ip_y_key", on_change=update_ry)
+                with c_iay: st.selectbox("Irregularidad Altura (Ia)", list(norma.irregularidad_altura.keys()), key="ia_y_key", on_change=update_ry)
+                with c_ipy: st.selectbox("Irregularidad Planta (Ip)", list(norma.irregularidad_planta.keys()), key="ip_y_key", on_change=update_ry)
                 
+                st.markdown("**Valores de Cálculo (Editables):**")
                 cy1, cy2, cy3, cy4 = st.columns([1, 1, 1, 1.5])
                 r0_y_val = cy1.number_input("R0 Y", value=st.session_state.r0_y, step=1.0)
                 ia_y_val = cy2.number_input("Ia Y", value=st.session_state.ia_y, step=0.05)
@@ -217,7 +205,7 @@ if modulo == "Espectro de Diseño":
                         title=dict(text=f"<b>ESPECTRO {label_eje}</b>", font=dict(size=14)),
                         xaxis=dict(title="Periodo T (s)", showgrid=True, gridcolor='lightgray'),
                         yaxis=dict(title=label_eje, showgrid=True, gridcolor='lightgray'),
-                        template="plotly_white", height=500, hovermode="x unified",
+                        template="plotly_white", height=450, hovermode="x unified",
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                     )
                     st.plotly_chart(fig, use_container_width=True)
@@ -232,6 +220,7 @@ if modulo == "Espectro de Diseño":
                         st.dataframe(df, use_container_width=True, height=200)
                         
                         col_d1, col_d2, col_d3 = st.columns([1, 1, 1.5])
+                        
                         txt_x = df.iloc[:, [0, 2]].to_csv(sep='\t', index=False, header=False).encode('utf-8')
                         txt_y = df.iloc[:, [0, 3]].to_csv(sep='\t', index=False, header=False).encode('utf-8')
                         
@@ -241,15 +230,20 @@ if modulo == "Espectro de Diseño":
                         img_bytes = fig.to_image(format="png", width=800, height=400, scale=2)
                         img_stream = io.BytesIO(img_bytes)
                         
+                        # CORRECCIÓN AQUI: AGREGAMOS TODAS LAS LLAVES QUE FALTABAN
                         report_params = {
                             'suelo': suelo, 'categoria': cat_sel, 
                             'rx': rx_final, 'ry': ry_final, 
                             'unidad': unidad, 'direccion': direccion,
                             'sistema_x': st.session_state.sis_x_key,
-                            'sistema_y': st.session_state.sis_y_key
+                            'sistema_y': st.session_state.sis_y_key,
+                            'r0_x': r0_x_val, 'ia_x': ia_x_val, 'ip_x': ip_x_val, # <--- FALTABAN ESTAS
+                            'r0_y': r0_y_val, 'ia_y': ia_y_val, 'ip_y': ip_y_val  # <--- Y ESTAS
                         }
+                        
                         pdf_bytes = create_pdf(report_params, info, direccion, df, img_stream)
                         col_d3.download_button("📄 Reporte PDF", pdf_bytes, "Memoria_SOFIPS.pdf", "application/pdf", type="primary")
+
     else:
         st.warning(f"⚠️ El módulo para **{pais_seleccionado}** está en desarrollo.")
 
