@@ -10,7 +10,6 @@ from ui.pdf_report import create_pdf
 from core.etabs_validator import EtabsValidator
 from core.norma_e030 import NormaE030
 
-# 1. CONFIGURACIÓN
 st.set_page_config(page_title="SOFIPS | Suite Sísmica", layout="wide", page_icon="🏗️")
 
 st.markdown("""
@@ -19,87 +18,57 @@ st.markdown("""
 .custom-metric { background-color: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 5px; padding: 8px; text-align: center; margin-bottom: 10px; }
 .metric-label { font-size: 12px; color: #666; margin: 0; text-transform: uppercase; font-weight: 600; }
 .metric-value { font-size: 18px; font-weight: bold; color: #2C3E50; margin: 0; }
-a.leaflet-control-zoom-in, a.leaflet-control-zoom-out, a.leaflet-control-layers-toggle { cursor: pointer !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- FUNCIONES DE AYUDA VISUAL ---
-def mostrar_ayuda_img(path, caption="Referencia Normativa"):
-    """Muestra una imagen de ayuda dentro de un expander"""
-    with st.expander(f"👁️ Ver {caption}"):
+# Helper para mostrar imagen de ayuda
+def ayuda_tabla(path, titulo):
+    with st.expander(f"👁️ Ver {titulo}"):
         if os.path.exists(path):
             st.image(path, use_container_width=True)
         else:
-            st.warning(f"Falta la imagen: {path}")
+            st.warning(f"Sube la imagen '{path}' a la carpeta 'assets'")
 
-def mostrar_pdf_norma():
-    """Muestra el PDF completo en la web"""
-    pdf_path = "assets/Norma_E030.pdf"
-    if os.path.exists(pdf_path):
-        with open(pdf_path, "rb") as f:
-            base64_pdf = base64.b64encode(f.read()).decode('utf-8')
-        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600" type="application/pdf"></iframe>'
-        st.markdown(pdf_display, unsafe_allow_html=True)
-    else:
-        st.error("⚠️ No se encontró el archivo 'assets/Norma_E030.pdf'")
-
-# ---------------------------------------------------------
-# BARRA LATERAL
-# ---------------------------------------------------------
+# SIDEBAR
 with st.sidebar:
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
         st.image(logo_path, use_container_width=True)
-    
     st.title("🎛️ Panel de Control")
     st.markdown("---")
-    
     manager = SeismicManager()
     pais_seleccionado = st.selectbox("📍 Normativa / País", list(manager.available_codes.keys()))
-    
     st.markdown("### 🛠️ Herramientas")
-    modulo = st.radio("Módulo:", ["Espectro de Diseño", "Verificación E.030 (ETABS)"])
-    
-    st.markdown("---")
-    # BOTÓN PARA VER NORMA COMPLETA
-    if st.checkbox("📖 Ver Norma E.030 Completa (PDF)"):
-        st.session_state['ver_pdf'] = True
-    else:
-        st.session_state['ver_pdf'] = False
+    modulo = st.radio("Seleccione módulo:", ["Espectro de Diseño", "Verificación E.030 (ETABS)"])
+    st.info("v2.5 Enterprise Cloud")
 
-    st.info("v2.3 Enterprise Cloud")
-
-# ---------------------------------------------------------
 # HEADER
-# ---------------------------------------------------------
-if not st.session_state.get('ver_pdf', False):
-    logo_header = "assets/logo.png"
-    if os.path.exists(logo_header):
-        with open(logo_header, "rb") as f:
-            img_base64 = base64.b64encode(f.read()).decode()
-        header_html = f"""
-        <div style="display: flex; align-items: center; margin-bottom: 20px;">
-            <img src="data:image/png;base64,{img_base64}" style="width: 260px; max-width: 100%; margin-right: 20px;">
-            <div>
-                <h3 style="margin: 0; color: #2C3E50; font-weight: bold; font-size: 28px; line-height: 1.2;">SOFIPS: Software informático de análisis y diseño sismorresistente</h3>
-                <p style="margin: 5px 0 0 0; color: gray; font-size: 16px;">Módulo Activo: <b>{modulo}</b> | Norma Peruana E.030 (2025)</p>
-            </div>
+logo_header = "assets/logo.png"
+if os.path.exists(logo_header):
+    with open(logo_header, "rb") as f:
+        img_base64 = base64.b64encode(f.read()).decode()
+    header_html = f"""
+    <div style="display: flex; align-items: center; margin-bottom: 20px;">
+        <img src="data:image/png;base64,{img_base64}" style="width: 260px; max-width: 100%; margin-right: 20px;">
+        <div>
+            <h3 style="margin: 0; color: #2C3E50; font-weight: bold; font-size: 28px; line-height: 1.2;">SOFIPS: Software informático de análisis y diseño sismorresistente</h3>
+            <p style="margin: 5px 0 0 0; color: gray; font-size: 16px;">Módulo Activo: <b>{modulo}</b> | Norma Peruana E.030 (2025)</p>
         </div>
-        """
-        st.markdown(header_html, unsafe_allow_html=True)
-        st.markdown("---")
+    </div>
+    """
+    st.markdown(header_html, unsafe_allow_html=True)
+    st.markdown("---")
 
-# ---------------------------------------------------------
-# LOGICA PRINCIPAL
-# ---------------------------------------------------------
+# INICIALIZAR ESTADO
+if "u_val" not in st.session_state: st.session_state["u_val"] = 1.0
+if "r0_x" not in st.session_state: st.session_state["r0_x"] = 8.0
+if "ia_x" not in st.session_state: st.session_state["ia_x"] = 1.0
+if "ip_x" not in st.session_state: st.session_state["ip_x"] = 1.0
+if "r0_y" not in st.session_state: st.session_state["r0_y"] = 8.0
+if "ia_y" not in st.session_state: st.session_state["ia_y"] = 1.0
+if "ip_y" not in st.session_state: st.session_state["ip_y"] = 1.0
 
-# SI EL USUARIO ACTIVÓ VER PDF
-if st.session_state.get('ver_pdf', False):
-    st.title("📖 Reglamento Nacional de Edificaciones - Norma E.030")
-    mostrar_pdf_norma()
-
-# SI NO, MOSTRAMOS LOS MÓDULOS NORMALES
-elif modulo == "Espectro de Diseño":
+if modulo == "Espectro de Diseño":
     NormaClass = manager.get_norma_class(pais_seleccionado)
     if NormaClass and "Perú" in pais_seleccionado:
         norma = NormaE030()
@@ -120,21 +89,30 @@ elif modulo == "Espectro de Diseño":
         with col_der:
             st.subheader("⚙️ Parámetros de Diseño")
             
+            # --- ZONA ---
             c1, c2, c3 = st.columns(3)
             if "zona_seleccionada" not in st.session_state: st.session_state["zona_seleccionada"] = 4
-            zona = c1.selectbox("Zona (Z)", [4, 3, 2, 1], key="zona_seleccionada")
-            
-            lista_suelos = list(norma.factor_S.keys())
-            suelo = c2.selectbox("Suelo (S)", lista_suelos, index=1)
-            
-            # CATEGORIA CON AYUDA VISUAL
+            with c1:
+                zona = st.selectbox("Zona (Z)", [4, 3, 2, 1], key="zona_seleccionada")
+
+            # --- SUELO (Con ayuda visual) ---
+            with c2:
+                suelo = st.selectbox("Suelo (S)", list(norma.factor_S.keys()), index=1)
+                
+            # --- CATEGORIA (Con ayuda visual) ---
             def update_u(): st.session_state.u_val = norma.categorias[st.session_state.cat_key]
-            lista_usos = list(norma.categorias.keys())
-            cat_sel = c3.selectbox("Categoría (U)", lista_usos, index=2, key="cat_key", on_change=update_u)
+            with c3:
+                cat_sel = st.selectbox("Uso (U)", list(norma.categorias.keys()), index=2, key="cat_key", on_change=update_u)
             
-            # --- AYUDA VISUAL TABLA 7 ---
-            mostrar_ayuda_img("assets/tabla_categorias.png", "Tabla N° 7 (Categorías)")
-            
+            # BLOQUE DE AYUDAS VISUALES
+            c_help1, c_help2 = st.columns(2)
+            with c_help1:
+                ayuda_tabla("assets/tabla_perfiles_suelo.png", "Tablas Suelos (N° 2 y 3)")
+            with c_help2:
+                ayuda_tabla("assets/tabla_parametros_suelo.png", "Tablas Factores S, TP, TL")
+                ayuda_tabla("assets/tabla_categorias.png", "Tabla Categorías (N° 7)")
+
+            # Input numérico de U (editable)
             st.write("**Factor U (Editable):**")
             u_final = st.number_input("Valor U", value=st.session_state.u_val, format="%.2f", step=0.1, label_visibility="collapsed")
 
@@ -151,16 +129,10 @@ elif modulo == "Espectro de Diseño":
                     st.session_state.ip_x = norma.irregularidad_planta[st.session_state.ip_x_key]
                 
                 st.selectbox("Sistema Estructural X", list(norma.sistemas_estructurales.keys()), index=5, key="sis_x_key", on_change=update_rx)
-                mostrar_ayuda_img("assets/tabla_sistemas.png", "Tabla N° 10 (Sistemas)") # AYUDA
-
-                c_ia_x, c_ip_x = st.columns(2)
-                with c_ia_x:
-                    st.selectbox("Irregularidad Altura (Ia)", list(norma.irregularidad_altura.keys()), key="ia_x_key", on_change=update_rx)
-                    mostrar_ayuda_img("assets/tabla_irregularidad_altura.png", "Tabla N° 11") # AYUDA
                 
-                with c_ip_x:
-                    st.selectbox("Irregularidad Planta (Ip)", list(norma.irregularidad_planta.keys()), key="ip_x_key", on_change=update_rx)
-                    mostrar_ayuda_img("assets/tabla_irregularidad_planta.png", "Tabla N° 12") # AYUDA
+                c_ia_x, c_ip_x = st.columns(2)
+                st.selectbox("Irregularidad Altura (Ia)", list(norma.irregularidad_altura.keys()), key="ia_x_key", on_change=update_rx)
+                st.selectbox("Irregularidad Planta (Ip)", list(norma.irregularidad_planta.keys()), key="ip_x_key", on_change=update_rx)
                 
                 st.markdown("**Valores de Cálculo (Editables):**")
                 cx1, cx2, cx3, cx4 = st.columns([1, 1, 1, 1.5])
@@ -179,15 +151,10 @@ elif modulo == "Espectro de Diseño":
                     st.session_state.ip_y = norma.irregularidad_planta[st.session_state.ip_y_key]
                 
                 st.selectbox("Sistema Estructural Y", list(norma.sistemas_estructurales.keys()), index=5, key="sis_y_key", on_change=update_ry)
-                mostrar_ayuda_img("assets/tabla_sistemas.png", "Tabla N° 10 (Sistemas)") # AYUDA
-
+                
                 c_ia_y, c_ip_y = st.columns(2)
-                with c_ia_y:
-                    st.selectbox("Irregularidad Altura (Ia)", list(norma.irregularidad_altura.keys()), key="ia_y_key", on_change=update_ry)
-                    mostrar_ayuda_img("assets/tabla_irregularidad_altura.png", "Tabla N° 11") # AYUDA
-                with c_ip_y:
-                    st.selectbox("Irregularidad Planta (Ip)", list(norma.irregularidad_planta.keys()), key="ip_y_key", on_change=update_ry)
-                    mostrar_ayuda_img("assets/tabla_irregularidad_planta.png", "Tabla N° 12") # AYUDA
+                st.selectbox("Irregularidad Altura (Ia)", list(norma.irregularidad_altura.keys()), key="ia_y_key", on_change=update_ry)
+                st.selectbox("Irregularidad Planta (Ip)", list(norma.irregularidad_planta.keys()), key="ip_y_key", on_change=update_ry)
                 
                 st.markdown("**Valores de Cálculo (Editables):**")
                 cy1, cy2, cy3, cy4 = st.columns([1, 1, 1, 1.5])
@@ -207,10 +174,12 @@ elif modulo == "Espectro de Diseño":
             ejecutar = st.button("🚀 Calcular Espectros Combinados", type="primary", use_container_width=True)
 
             if ejecutar:
+                # Se envían los R0 también para el reporte PDF
                 input_params = {
                     'zona': zona, 'suelo': suelo, 'categoria': cat_sel,
                     'u_val': u_final,
-                    'rx_val': rx_final, 'ry_val': ry_final
+                    'rx_val': rx_final, 'ry_val': ry_final,
+                    'r0_x': r0_x_val, 'r0_y': r0_y_val
                 }
 
                 Tx, Sa_x_des_raw, Sa_y_des_raw, Sa_el_raw, info = norma.get_spectrum_curve(input_params)
@@ -263,6 +232,7 @@ elif modulo == "Espectro de Diseño":
                         
                         img_bytes = fig.to_image(format="png", width=800, height=400, scale=2)
                         img_stream = io.BytesIO(img_bytes)
+                        
                         report_params = {
                             'suelo': suelo, 'categoria': cat_sel, 
                             'rx': rx_final, 'ry': ry_final, 
@@ -270,6 +240,7 @@ elif modulo == "Espectro de Diseño":
                             'sistema_x': st.session_state.sis_x_key,
                             'sistema_y': st.session_state.sis_y_key
                         }
+                        
                         pdf_bytes = create_pdf(report_params, info, direccion, df, img_stream)
                         col_d3.download_button("📄 Reporte PDF", pdf_bytes, "Memoria_SOFIPS.pdf", "application/pdf", type="primary")
 
