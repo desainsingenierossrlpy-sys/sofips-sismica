@@ -18,16 +18,17 @@ st.markdown("""
 .custom-metric { background-color: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 5px; padding: 8px; text-align: center; margin-bottom: 10px; }
 .metric-label { font-size: 12px; color: #666; margin: 0; text-transform: uppercase; font-weight: 600; }
 .metric-value { font-size: 18px; font-weight: bold; color: #2C3E50; margin: 0; }
+a.leaflet-control-zoom-in, a.leaflet-control-zoom-out, a.leaflet-control-layers-toggle { cursor: pointer !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# Helper para mostrar imagen de ayuda
-def ayuda_tabla(path, titulo):
-    with st.expander(f"👁️ Ver {titulo}"):
+# Función auxiliar para mostrar ayuda
+def ayuda_visual(path, label):
+    with st.expander(f"👁️ Ver {label}"):
         if os.path.exists(path):
             st.image(path, use_container_width=True)
         else:
-            st.warning(f"Sube la imagen '{path}' a la carpeta 'assets'")
+            st.warning(f"Falta imagen: {path}")
 
 # SIDEBAR
 with st.sidebar:
@@ -40,7 +41,7 @@ with st.sidebar:
     pais_seleccionado = st.selectbox("📍 Normativa / País", list(manager.available_codes.keys()))
     st.markdown("### 🛠️ Herramientas")
     modulo = st.radio("Seleccione módulo:", ["Espectro de Diseño", "Verificación E.030 (ETABS)"])
-    st.info("v2.5 Enterprise Cloud")
+    st.info("v2.6 Enterprise Cloud")
 
 # HEADER
 logo_header = "assets/logo.png"
@@ -94,27 +95,25 @@ if modulo == "Espectro de Diseño":
             if "zona_seleccionada" not in st.session_state: st.session_state["zona_seleccionada"] = 4
             with c1:
                 zona = st.selectbox("Zona (Z)", [4, 3, 2, 1], key="zona_seleccionada")
+                ayuda_visual("assets/tabla_zonas.png", "Mapa Zonas")
 
-            # --- SUELO (Con ayuda visual) ---
+            # --- SUELO ---
             with c2:
                 suelo = st.selectbox("Suelo (S)", list(norma.factor_S.keys()), index=1)
-                
-            # --- CATEGORIA (Con ayuda visual) ---
+                ayuda_visual("assets/tabla_suelos.png", "Tablas Suelos (N° 2 y 3)")
+
+            # --- CATEGORIA ---
             def update_u(): st.session_state.u_val = norma.categorias[st.session_state.cat_key]
             with c3:
-                cat_sel = st.selectbox("Uso (U)", list(norma.categorias.keys()), index=2, key="cat_key", on_change=update_u)
+                cat_sel = st.selectbox("Cat. (U)", list(norma.categorias.keys()), index=2, key="cat_key", on_change=update_u)
+                ayuda_visual("assets/tabla_categorias.png", "Tabla Categorías (N° 7)")
             
-            # BLOQUE DE AYUDAS VISUALES
-            c_help1, c_help2 = st.columns(2)
-            with c_help1:
-                ayuda_tabla("assets/tabla_perfiles_suelo.png", "Tablas Suelos (N° 2 y 3)")
-            with c_help2:
-                ayuda_tabla("assets/tabla_parametros_suelo.png", "Tablas Factores S, TP, TL")
-                ayuda_tabla("assets/tabla_categorias.png", "Tabla Categorías (N° 7)")
-
-            # Input numérico de U (editable)
+            # Factor U Numérico
             st.write("**Factor U (Editable):**")
             u_final = st.number_input("Valor U", value=st.session_state.u_val, format="%.2f", step=0.1, label_visibility="collapsed")
+            
+            # Ayuda extra parámetros suelo
+            ayuda_visual("assets/tabla_parametros_suelo.png", "Tablas Factores S, TP, TL")
 
             st.markdown("---")
             st.write("🏗️ **Coeficientes de Reducción (R)**")
@@ -129,12 +128,17 @@ if modulo == "Espectro de Diseño":
                     st.session_state.ip_x = norma.irregularidad_planta[st.session_state.ip_x_key]
                 
                 st.selectbox("Sistema Estructural X", list(norma.sistemas_estructurales.keys()), index=5, key="sis_x_key", on_change=update_rx)
-                
+                ayuda_visual("assets/tabla_sistemas.png", "Tabla N° 10 (Sistemas)")
+
                 c_ia_x, c_ip_x = st.columns(2)
-                st.selectbox("Irregularidad Altura (Ia)", list(norma.irregularidad_altura.keys()), key="ia_x_key", on_change=update_rx)
-                st.selectbox("Irregularidad Planta (Ip)", list(norma.irregularidad_planta.keys()), key="ip_x_key", on_change=update_rx)
-                
-                st.markdown("**Valores de Cálculo (Editables):**")
+                with c_ia_x:
+                    st.selectbox("Irregularidad Altura (Ia)", list(norma.irregularidad_altura.keys()), key="ia_x_key", on_change=update_rx)
+                    ayuda_visual("assets/tabla_irregularidad_altura.png", "Tabla N° 11")
+                with c_ip_x:
+                    st.selectbox("Irregularidad Planta (Ip)", list(norma.irregularidad_planta.keys()), key="ip_x_key", on_change=update_rx)
+                    ayuda_visual("assets/tabla_irregularidad_planta.png", "Tabla N° 12")
+
+                # Valores Numéricos
                 cx1, cx2, cx3, cx4 = st.columns([1, 1, 1, 1.5])
                 r0_x_val = cx1.number_input("R0 X", value=st.session_state.r0_x, step=1.0)
                 ia_x_val = cx2.number_input("Ia X", value=st.session_state.ia_x, step=0.05)
@@ -153,10 +157,11 @@ if modulo == "Espectro de Diseño":
                 st.selectbox("Sistema Estructural Y", list(norma.sistemas_estructurales.keys()), index=5, key="sis_y_key", on_change=update_ry)
                 
                 c_ia_y, c_ip_y = st.columns(2)
-                st.selectbox("Irregularidad Altura (Ia)", list(norma.irregularidad_altura.keys()), key="ia_y_key", on_change=update_ry)
-                st.selectbox("Irregularidad Planta (Ip)", list(norma.irregularidad_planta.keys()), key="ip_y_key", on_change=update_ry)
+                with c_ia_y:
+                    st.selectbox("Irregularidad Altura (Ia)", list(norma.irregularidad_altura.keys()), key="ia_y_key", on_change=update_ry)
+                with c_ipy:
+                    st.selectbox("Irregularidad Planta (Ip)", list(norma.irregularidad_planta.keys()), key="ip_y_key", on_change=update_ry)
                 
-                st.markdown("**Valores de Cálculo (Editables):**")
                 cy1, cy2, cy3, cy4 = st.columns([1, 1, 1, 1.5])
                 r0_y_val = cy1.number_input("R0 Y", value=st.session_state.r0_y, step=1.0)
                 ia_y_val = cy2.number_input("Ia Y", value=st.session_state.ia_y, step=0.05)
@@ -174,12 +179,10 @@ if modulo == "Espectro de Diseño":
             ejecutar = st.button("🚀 Calcular Espectros Combinados", type="primary", use_container_width=True)
 
             if ejecutar:
-                # Se envían los R0 también para el reporte PDF
                 input_params = {
                     'zona': zona, 'suelo': suelo, 'categoria': cat_sel,
-                    'u_val': u_final,
-                    'rx_val': rx_final, 'ry_val': ry_final,
-                    'r0_x': r0_x_val, 'r0_y': r0_y_val
+                    'u_val': u_final, 'rx_val': rx_final, 'ry_val': ry_final,
+                    'r0_x': r0_x_val, 'r0_y': r0_y_val # Agregado para el PDF
                 }
 
                 Tx, Sa_x_des_raw, Sa_y_des_raw, Sa_el_raw, info = norma.get_spectrum_curve(input_params)
@@ -233,9 +236,10 @@ if modulo == "Espectro de Diseño":
                         img_bytes = fig.to_image(format="png", width=800, height=400, scale=2)
                         img_stream = io.BytesIO(img_bytes)
                         
+                        # CORRECCIÓN DE CLAVES PARA PDF
                         report_params = {
                             'suelo': suelo, 'categoria': cat_sel, 
-                            'rx': rx_final, 'ry': ry_final, 
+                            'rx_final': rx_final, 'ry_final': ry_final, # Claves correctas
                             'unidad': unidad, 'direccion': direccion,
                             'sistema_x': st.session_state.sis_x_key,
                             'sistema_y': st.session_state.sis_y_key
