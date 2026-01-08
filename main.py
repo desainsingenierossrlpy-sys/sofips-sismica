@@ -41,7 +41,7 @@ with st.sidebar:
     pais_seleccionado = st.selectbox("📍 Normativa / País", list(manager.available_codes.keys()))
     st.markdown("### 🛠️ Herramientas")
     modulo = st.radio("Seleccione módulo:", ["Espectro de Diseño", "Verificación E.030 (ETABS)"])
-    st.info("v2.6 Enterprise Cloud")
+    st.info("v2.7 Enterprise Cloud")
 
 # HEADER
 logo_header = "assets/logo.png"
@@ -108,11 +108,9 @@ if modulo == "Espectro de Diseño":
                 cat_sel = st.selectbox("Cat. (U)", list(norma.categorias.keys()), index=2, key="cat_key", on_change=update_u)
                 ayuda_visual("assets/tabla_categorias.png", "Tabla Categorías (N° 7)")
             
-            # Factor U Numérico
             st.write("**Factor U (Editable):**")
             u_final = st.number_input("Valor U", value=st.session_state.u_val, format="%.2f", step=0.1, label_visibility="collapsed")
             
-            # Ayuda extra parámetros suelo
             ayuda_visual("assets/tabla_parametros_suelo.png", "Tablas Factores S, TP, TL")
 
             st.markdown("---")
@@ -138,7 +136,7 @@ if modulo == "Espectro de Diseño":
                     st.selectbox("Irregularidad Planta (Ip)", list(norma.irregularidad_planta.keys()), key="ip_x_key", on_change=update_rx)
                     ayuda_visual("assets/tabla_irregularidad_planta.png", "Tabla N° 12")
 
-                # Valores Numéricos
+                st.markdown("**Valores de Cálculo (Editables):**")
                 cx1, cx2, cx3, cx4 = st.columns([1, 1, 1, 1.5])
                 r0_x_val = cx1.number_input("R0 X", value=st.session_state.r0_x, step=1.0)
                 ia_x_val = cx2.number_input("Ia X", value=st.session_state.ia_x, step=0.05)
@@ -159,9 +157,11 @@ if modulo == "Espectro de Diseño":
                 c_ia_y, c_ip_y = st.columns(2)
                 with c_ia_y:
                     st.selectbox("Irregularidad Altura (Ia)", list(norma.irregularidad_altura.keys()), key="ia_y_key", on_change=update_ry)
-                with c_ipy:
+                # CORRECCIÓN AQUI: c_ip_y en vez de c_ipy
+                with c_ip_y:
                     st.selectbox("Irregularidad Planta (Ip)", list(norma.irregularidad_planta.keys()), key="ip_y_key", on_change=update_ry)
                 
+                st.markdown("**Valores de Cálculo (Editables):**")
                 cy1, cy2, cy3, cy4 = st.columns([1, 1, 1, 1.5])
                 r0_y_val = cy1.number_input("R0 Y", value=st.session_state.r0_y, step=1.0)
                 ia_y_val = cy2.number_input("Ia Y", value=st.session_state.ia_y, step=0.05)
@@ -182,7 +182,7 @@ if modulo == "Espectro de Diseño":
                 input_params = {
                     'zona': zona, 'suelo': suelo, 'categoria': cat_sel,
                     'u_val': u_final, 'rx_val': rx_final, 'ry_val': ry_final,
-                    'r0_x': r0_x_val, 'r0_y': r0_y_val # Agregado para el PDF
+                    'r0_x': r0_x_val, 'r0_y': r0_y_val
                 }
 
                 Tx, Sa_x_des_raw, Sa_y_des_raw, Sa_el_raw, info = norma.get_spectrum_curve(input_params)
@@ -219,9 +219,9 @@ if modulo == "Espectro de Diseño":
                     with st.expander("📋 Descargas (PDF / Excel / ETABS)", expanded=True):
                         df = pd.DataFrame({
                             "T (s)": Tx,
-                            f"Sa Elástico ({unidad})": Sa_el,
-                            f"Sa Diseño X ({unidad})": Sa_x_des,
-                            f"Sa Diseño Y ({unidad})": Sa_y_des
+                            f"Sa Elástico": Sa_el,
+                            f"Sa Diseño X": Sa_x_des,
+                            f"Sa Diseño Y": Sa_y_des
                         })
                         st.dataframe(df, use_container_width=True, height=200)
                         
@@ -236,15 +236,13 @@ if modulo == "Espectro de Diseño":
                         img_bytes = fig.to_image(format="png", width=800, height=400, scale=2)
                         img_stream = io.BytesIO(img_bytes)
                         
-                        # CORRECCIÓN DE CLAVES PARA PDF
                         report_params = {
                             'suelo': suelo, 'categoria': cat_sel, 
-                            'rx_final': rx_final, 'ry_final': ry_final, # Claves correctas
+                            'rx_final': rx_final, 'ry_final': ry_final, 
                             'unidad': unidad, 'direccion': direccion,
                             'sistema_x': st.session_state.sis_x_key,
                             'sistema_y': st.session_state.sis_y_key
                         }
-                        
                         pdf_bytes = create_pdf(report_params, info, direccion, df, img_stream)
                         col_d3.download_button("📄 Reporte PDF", pdf_bytes, "Memoria_SOFIPS.pdf", "application/pdf", type="primary")
 
