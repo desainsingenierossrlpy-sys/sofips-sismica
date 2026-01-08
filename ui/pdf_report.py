@@ -37,41 +37,69 @@ def create_pdf(params, info, direccion, df_data, img_stream):
     pdf.chapter_title("1. GENERALIDADES")
     pdf.set_font("helvetica", "", 10)
     pdf.cell(40, 8, "Ubicación:", 0, 0)
-    pdf.multi_cell(0, 8, str(direccion))
+    # Limpiamos caracteres raros de la dirección
+    clean_dir = str(direccion).encode('latin-1', 'replace').decode('latin-1')
+    pdf.multi_cell(0, 8, clean_dir)
     pdf.ln(2)
 
     # 2. PARÁMETROS DE SITIO
     pdf.chapter_title("2. PARÁMETROS DE SITIO")
-    def fila(n, v):
-        pdf.set_font("helvetica", "B", 9)
-        pdf.cell(50, 7, n, 1, 0)
-        pdf.set_font("helvetica", "", 9)
-        pdf.cell(0, 7, str(v), 1, 1)
+    
+    # Función para fila de tabla
+    def row_table(label, val):
+        pdf.set_font("helvetica", "B", 10)
+        pdf.cell(80, 7, label, 1, 0)
+        pdf.set_font("helvetica", "", 10)
+        pdf.cell(0, 7, str(val), 1, 1, 'C')
 
-    fila("Zona Sísmica (Z)", f"{info['Z']}g")
-    fila("Perfil de Suelo (S)", f"{info['S']} ({params['suelo']})")
-    fila("Categoría (U)", f"{info['U']} ({params['categoria']})")
-    fila("Periodos (TP / TL)", f"{info['TP']} s / {info['TL']} s")
+    # Convertimos strings para evitar errores de tildes
+    suelo_str = params['suelo'].encode('latin-1', 'replace').decode('latin-1')
+    
+    row_table("Zona Sísmica (Z)", f"{info['Z']}g")
+    row_table("Perfil de Suelo (S)", f"{info['S']} ({suelo_str})")
+    row_table("Categoría (U)", f"{info['U']}")
+    row_table("Periodos (TP / TL)", f"{info['TP']} s / {info['TL']} s")
     pdf.ln(5)
 
-    # 3. SISTEMA ESTRUCTURAL (NUEVO)
-    pdf.chapter_title("3. SISTEMA ESTRUCTURAL Y REGULARIDAD")
+    # 3. SISTEMA ESTRUCTURAL Y R (Tabla Detallada)
+    pdf.chapter_title("3. CÁLCULO DE COEFICIENTE DE REDUCCIÓN (R)")
     
-    pdf.set_font("helvetica", "B", 10); pdf.cell(0, 8, "Dirección X-X:", 0, 1)
+    pdf.set_fill_color(240, 240, 240)
+    pdf.set_font("helvetica", "B", 10)
+    pdf.cell(0, 8, "DIRECCIÓN X-X", 1, 1, 'L', True)
+    
     pdf.set_font("helvetica", "", 9)
-    pdf.multi_cell(0, 6, f"Sistema: {params['sistema_x']}")
-    pdf.cell(0, 6, f"R Calculado = {params['rx_final']:.2f}", 0, 1)
+    sis_x = params['sistema_x'].split(':')[0] # Solo nombre corto
+    pdf.cell(50, 7, f"Sistema: {sis_x}", 1, 0)
+    pdf.cell(30, 7, f"R0 = {params['r0_x']}", 1, 0, 'C')
+    pdf.cell(30, 7, f"Ia = {params['ia_x']}", 1, 0, 'C')
+    pdf.cell(30, 7, f"Ip = {params['ip_x']}", 1, 0, 'C')
+    pdf.set_font("helvetica", "B", 9)
+    pdf.cell(0, 7, f"R = {params['rx']:.2f}", 1, 1, 'C') # R Final
+
     pdf.ln(2)
     
-    pdf.set_font("helvetica", "B", 10); pdf.cell(0, 8, "Dirección Y-Y:", 0, 1)
+    pdf.set_font("helvetica", "B", 10)
+    pdf.cell(0, 8, "DIRECCIÓN Y-Y", 1, 1, 'L', True)
+    
     pdf.set_font("helvetica", "", 9)
-    pdf.multi_cell(0, 6, f"Sistema: {params['sistema_y']}")
-    pdf.cell(0, 6, f"R Calculado = {params['ry_final']:.2f}", 0, 1)
-    pdf.ln(5)
+    sis_y = params['sistema_y'].split(':')[0]
+    pdf.cell(50, 7, f"Sistema: {sis_y}", 1, 0)
+    pdf.cell(30, 7, f"R0 = {params['r0_y']}", 1, 0, 'C')
+    pdf.cell(30, 7, f"Ia = {params['ia_y']}", 1, 0, 'C')
+    pdf.cell(30, 7, f"Ip = {params['ip_y']}", 1, 0, 'C')
+    pdf.set_font("helvetica", "B", 9)
+    pdf.cell(0, 7, f"R = {params['ry']:.2f}", 1, 1, 'C')
+    
+    pdf.ln(10)
 
     # 4. GRÁFICO
     pdf.chapter_title("4. ESPECTRO DE DISEÑO")
-    if img_stream: pdf.image(img_stream, x=15, w=180)
+    if img_stream: 
+        pdf.image(img_stream, x=15, w=180)
     pdf.ln(5)
+    
+    pdf.set_font("helvetica", "I", 8)
+    pdf.cell(0, 5, f"* Aceleración expresada en: {params['unidad']}", 0, 1)
 
     return bytes(pdf.output())
