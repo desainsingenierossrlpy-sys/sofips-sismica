@@ -68,7 +68,6 @@ with st.sidebar:
         if "zona_seleccionada" not in st.session_state: st.session_state["zona_seleccionada"] = 4
         if "u_val" not in st.session_state: st.session_state["u_val"] = 1.0
         
-        # VARIABLE DE MEMORIA PARA EL CÁLCULO (ESTO EVITA QUE SE BORRE AL DESCARGAR)
         if "calculo_realizado" not in st.session_state: st.session_state["calculo_realizado"] = False
 
         # --- ZONA, SUELO, USO ---
@@ -99,7 +98,9 @@ with st.sidebar:
                 st.session_state.ia_x = norma.irregularidad_altura[st.session_state.ia_x_key]
                 st.session_state.ip_x = norma.irregularidad_planta[st.session_state.ip_x_key]
 
-            st.selectbox("Sistema X", list(norma.sistemas_estructurales.keys()), key="sis_x_key", index=5, on_change=upd_rx)
+            # CORRECCIÓN: Ahora el Sistema usa control_con_ayuda para mostrar la tabla R0
+            control_con_ayuda("Sistema X", list(norma.sistemas_estructurales.keys()), "sis_x_key", "assets/tabla_sistemas.png", index=5, on_change=upd_rx)
+            
             control_con_ayuda("Irreg. Altura", list(norma.irregularidad_altura.keys()), "ia_x_key", "assets/tabla_irregularidad_altura.png", index=0, on_change=upd_rx)
             control_con_ayuda("Irreg. Planta", list(norma.irregularidad_planta.keys()), "ip_x_key", "assets/tabla_irregularidad_planta.png", index=0, on_change=upd_rx)
             
@@ -117,7 +118,9 @@ with st.sidebar:
                 st.session_state.ia_y = norma.irregularidad_altura[st.session_state.ia_y_key]
                 st.session_state.ip_y = norma.irregularidad_planta[st.session_state.ip_y_key]
 
-            st.selectbox("Sistema Y", list(norma.sistemas_estructurales.keys()), key="sis_y_key", index=5, on_change=upd_ry)
+            # CORRECCIÓN: Ahora el Sistema usa control_con_ayuda para mostrar la tabla R0
+            control_con_ayuda("Sistema Y", list(norma.sistemas_estructurales.keys()), "sis_y_key", "assets/tabla_sistemas.png", index=5, on_change=upd_ry)
+            
             control_con_ayuda("Irreg. Altura Y", list(norma.irregularidad_altura.keys()), "ia_y_key", "assets/tabla_irregularidad_altura.png", index=0, on_change=upd_ry)
             control_con_ayuda("Irreg. Planta Y", list(norma.irregularidad_planta.keys()), "ip_y_key", "assets/tabla_irregularidad_planta.png", index=0, on_change=upd_ry)
             
@@ -135,7 +138,7 @@ with st.sidebar:
         
         # BOTÓN DE CÁLCULO
         if st.button("🚀 Calcular", type="primary", use_container_width=True):
-            st.session_state["calculo_realizado"] = True # ACTIVAMOS LA MEMORIA
+            st.session_state["calculo_realizado"] = True
 
 # ---------------------------------------------------------
 # ÁREA PRINCIPAL
@@ -166,7 +169,7 @@ if modulo == "Espectro de Diseño":
                 st.session_state["zona_seleccionada"] = MAPPING_ZONAS.get(depto, 4)
                 st.rerun()
 
-    # --- ZONA DE RESULTADOS (SOLO SI SE HA CALCULADO ALGUNA VEZ) ---
+    # --- ZONA DE RESULTADOS ---
     if st.session_state["calculo_realizado"]:
         norma = NormaE030()
         
