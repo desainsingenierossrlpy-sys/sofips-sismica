@@ -20,12 +20,11 @@ st.markdown("""
 .custom-metric { background-color: #f8f9fa; border-left: 5px solid #0055A4; padding: 10px; border-radius: 5px; text-align: center; margin-bottom: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 .metric-label { font-size: 11px; color: #666; margin: 0; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; }
 .metric-value { font-size: 22px; font-weight: 800; color: #2C3E50; margin: 5px 0 0 0; }
-/* Ajuste para alinear verticalmente el botón de ojo en el sidebar */
-div[data-testid="stHorizontalBlock"] { align-items: end; }
+div[data-testid="column"] { align-items: center; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- FUNCIONES DE AYUDA (MODALES) ---
+# --- FUNCIONES DE AYUDA ---
 @st.dialog("📘 Referencia Normativa")
 def ver_imagen_grande(path, caption):
     if os.path.exists(path):
@@ -34,35 +33,33 @@ def ver_imagen_grande(path, caption):
         st.error(f"⚠️ Falta la imagen: {path}")
 
 def control_con_ayuda(label_sel, opciones, key, path_img, index=0, on_change=None):
-    """Crea un selector y un botón de ayuda alineados en el sidebar"""
     c1, c2 = st.columns([0.85, 0.15])
     with c1:
         val = st.selectbox(label_sel, opciones, index=index, key=key, on_change=on_change)
     with c2:
-        # El CSS arriba alinea esto al fondo, así que no necesitamos espaciadores
-        if st.button("👁️", key=f"btn_{key}", help=f"Ver tabla normativa"):
+        st.write("") 
+        st.write("") 
+        if st.button("👁️", key=f"btn_{key}", help=f"Ver tabla"):
             ver_imagen_grande(path_img, label_sel)
     return val
 
 # ---------------------------------------------------------
-# BARRA LATERAL (CONTROLES)
+# SIDEBAR
 # ---------------------------------------------------------
 with st.sidebar:
-    # Logo
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
         st.image(logo_path, use_container_width=True)
     
     st.markdown("---")
     
-    # Selector de País y Módulo
     manager = SeismicManager()
     pais = st.selectbox("📍 Normativa", list(manager.available_codes.keys()))
     modulo = st.radio("🛠️ Herramienta", ["Espectro de Diseño", "Verificación E.030"])
     
     st.markdown("---")
 
-    # CONTROLES DE DISEÑO
+    # 2. CONTROLES DE DISEÑO
     if modulo == "Espectro de Diseño" and "Perú" in pais:
         norma = NormaE030()
         st.subheader("⚙️ Parámetros E.030")
@@ -70,10 +67,14 @@ with st.sidebar:
         # Inicializar estado
         if "zona_seleccionada" not in st.session_state: st.session_state["zona_seleccionada"] = 4
         if "u_val" not in st.session_state: st.session_state["u_val"] = 1.0
+        
+        # VARIABLE DE MEMORIA PARA EL CÁLCULO (ESTO EVITA QUE SE BORRE AL DESCARGAR)
+        if "calculo_realizado" not in st.session_state: st.session_state["calculo_realizado"] = False
 
-        # 1. ZONA, SUELO, USO (Con Ayuda)
+        # --- ZONA, SUELO, USO ---
         zona = control_con_ayuda("Zona (Z)", [4, 3, 2, 1], "zona_key", "assets/mapa_zonas.png", index=0)
-        if zona != st.session_state.zona_seleccionada: st.session_state.zona_seleccionada = zona
+        if zona != st.session_state.zona_seleccionada:
+             st.session_state.zona_seleccionada = zona
         
         suelo = control_con_ayuda("Perfil de Suelo (S)", list(norma.factor_S.keys()), "suelo_key", "assets/tabla_suelos.png", index=1)
         
@@ -87,20 +88,18 @@ with st.sidebar:
         
         tab_x, tab_y = st.tabs(["Dir X", "Dir Y"])
         
-        # INICIALIZAR R
         if "r0_x" not in st.session_state: 
             for k in ["r0_x","ia_x","ip_x","r0_y","ia_y","ip_y"]: st.session_state[k] = 1.0
             st.session_state["r0_x"] = 8.0; st.session_state["r0_y"] = 8.0
 
-        # DIR X (Con Ayuda)
+        # DIR X
         with tab_x:
             def upd_rx(): 
                 st.session_state.r0_x = norma.sistemas_estructurales[st.session_state.sis_x_key]
                 st.session_state.ia_x = norma.irregularidad_altura[st.session_state.ia_x_key]
                 st.session_state.ip_x = norma.irregularidad_planta[st.session_state.ip_x_key]
 
-            # Aquí implementamos control_con_ayuda para los sistemas e irregularidades
-            control_con_ayuda("Sistema X", list(norma.sistemas_estructurales.keys()), "sis_x_key", "assets/tabla_sistemas.png", index=5, on_change=upd_rx)
+            st.selectbox("Sistema X", list(norma.sistemas_estructurales.keys()), key="sis_x_key", index=5, on_change=upd_rx)
             control_con_ayuda("Irreg. Altura", list(norma.irregularidad_altura.keys()), "ia_x_key", "assets/tabla_irregularidad_altura.png", index=0, on_change=upd_rx)
             control_con_ayuda("Irreg. Planta", list(norma.irregularidad_planta.keys()), "ip_x_key", "assets/tabla_irregularidad_planta.png", index=0, on_change=upd_rx)
             
@@ -111,14 +110,14 @@ with st.sidebar:
             rx_final = r0_x_val * ia_x_val * ip_x_val
             c_rx_out.metric("R Final", f"{rx_final:.2f}")
 
-        # DIR Y (Con Ayuda)
+        # DIR Y
         with tab_y:
             def upd_ry(): 
                 st.session_state.r0_y = norma.sistemas_estructurales[st.session_state.sis_y_key]
                 st.session_state.ia_y = norma.irregularidad_altura[st.session_state.ia_y_key]
                 st.session_state.ip_y = norma.irregularidad_planta[st.session_state.ip_y_key]
 
-            control_con_ayuda("Sistema Y", list(norma.sistemas_estructurales.keys()), "sis_y_key", "assets/tabla_sistemas.png", index=5, on_change=upd_ry)
+            st.selectbox("Sistema Y", list(norma.sistemas_estructurales.keys()), key="sis_y_key", index=5, on_change=upd_ry)
             control_con_ayuda("Irreg. Altura Y", list(norma.irregularidad_altura.keys()), "ia_y_key", "assets/tabla_irregularidad_altura.png", index=0, on_change=upd_ry)
             control_con_ayuda("Irreg. Planta Y", list(norma.irregularidad_planta.keys()), "ip_y_key", "assets/tabla_irregularidad_planta.png", index=0, on_change=upd_ry)
             
@@ -134,7 +133,9 @@ with st.sidebar:
         factor_g = 9.81 if unidad == "m/s²" else 1.0
         label_eje = "Aceleración (m/s²)" if unidad == "m/s²" else "Aceleración (g)"
         
-        ejecutar = st.button("🚀 Calcular", type="primary", use_container_width=True)
+        # BOTÓN DE CÁLCULO
+        if st.button("🚀 Calcular", type="primary", use_container_width=True):
+            st.session_state["calculo_realizado"] = True # ACTIVAMOS LA MEMORIA
 
 # ---------------------------------------------------------
 # ÁREA PRINCIPAL
@@ -165,7 +166,8 @@ if modulo == "Espectro de Diseño":
                 st.session_state["zona_seleccionada"] = MAPPING_ZONAS.get(depto, 4)
                 st.rerun()
 
-    if ejecutar:
+    # --- ZONA DE RESULTADOS (SOLO SI SE HA CALCULADO ALGUNA VEZ) ---
+    if st.session_state["calculo_realizado"]:
         norma = NormaE030()
         
         if st.session_state.zona_seleccionada != zona:
