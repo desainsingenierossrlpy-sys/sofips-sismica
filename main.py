@@ -22,16 +22,24 @@ a.leaflet-control-zoom-in, a.leaflet-control-zoom-out, a.leaflet-control-layers-
 </style>
 """, unsafe_allow_html=True)
 
-# --- SISTEMA DE VENTANAS EMERGENTES (MODALES) ---
+# Función auxiliar para mostrar ayuda
+def ayuda_visual(path, label):
+    with st.expander(f"👁️ Ver {label}"):
+        if os.path.exists(path):
+            st.image(path, use_container_width=True)
+        else:
+            st.warning(f"Falta imagen: {path}")
+
+# SISTEMA DE VENTANAS EMERGENTES (MODALES)
 @st.dialog("📘 Referencia Normativa")
 def ver_imagen_grande(path, caption):
     if os.path.exists(path):
         st.image(path, caption=caption, use_container_width=True)
     else:
-        st.error(f"⚠️ Falta la imagen: {path}")
+        st.error(f"⚠️ No se encontró el archivo: {path}\n\nPor favor guarda la captura en la carpeta 'assets'.")
 
 def boton_ayuda(path, label, key_suffix):
-    if st.button(f"👁️ {label}", key=f"btn_{key_suffix}", help="Clic para ver la tabla en grande"):
+    if st.button(f"👁️ {label}", key=f"btn_{key_suffix}", help="Clic para ampliar"):
         ver_imagen_grande(path, label)
 
 # SIDEBAR
@@ -45,7 +53,7 @@ with st.sidebar:
     pais_seleccionado = st.selectbox("📍 Normativa / País", list(manager.available_codes.keys()))
     st.markdown("### 🛠️ Herramientas")
     modulo = st.radio("Seleccione módulo:", ["Espectro de Diseño", "Verificación E.030 (ETABS)"])
-    st.info("v2.9 Enterprise Cloud")
+    st.info("v3.0 Enterprise Cloud")
 
 # HEADER
 logo_header = "assets/logo.png"
@@ -94,16 +102,20 @@ if modulo == "Espectro de Diseño":
         with col_der:
             st.subheader("⚙️ Parámetros de Diseño")
             
+            # --- ZONA ---
             c1, c2, c3 = st.columns(3)
             if "zona_seleccionada" not in st.session_state: st.session_state["zona_seleccionada"] = 4
             with c1:
                 zona = st.selectbox("Zona (Z)", [4, 3, 2, 1], key="zona_seleccionada")
-                boton_ayuda("assets/tabla_zonas.png", "Mapa Zonas", "zona")
+                # CORRECCIÓN: Apuntamos al archivo del MAPA
+                boton_ayuda("assets/mapa_zonas.png", "Mapa Zonas", "zona")
 
+            # --- SUELO ---
             with c2:
                 suelo = st.selectbox("Suelo (S)", list(norma.factor_S.keys()), index=1)
                 boton_ayuda("assets/tabla_suelos.png", "Perfiles Suelo", "suelo")
 
+            # --- CATEGORIA ---
             def update_u(): st.session_state.u_val = norma.categorias[st.session_state.cat_key]
             with c3:
                 cat_sel = st.selectbox("Cat. (U)", list(norma.categorias.keys()), index=2, key="cat_key", on_change=update_u)
@@ -111,6 +123,7 @@ if modulo == "Espectro de Diseño":
             
             st.write("**Factor U (Editable):**")
             u_final = st.number_input("Valor U", value=st.session_state.u_val, format="%.2f", step=0.1, label_visibility="collapsed")
+            
             boton_ayuda("assets/tabla_parametros_suelo.png", "Tabla Factores S, TP, TL", "params")
 
             st.markdown("---")
@@ -230,15 +243,15 @@ if modulo == "Espectro de Diseño":
                         img_bytes = fig.to_image(format="png", width=800, height=400, scale=2)
                         img_stream = io.BytesIO(img_bytes)
                         
-                        # CORRECCIÓN AQUI: AGREGAMOS TODAS LAS LLAVES QUE FALTABAN
                         report_params = {
                             'suelo': suelo, 'categoria': cat_sel, 
                             'rx': rx_final, 'ry': ry_final, 
                             'unidad': unidad, 'direccion': direccion,
                             'sistema_x': st.session_state.sis_x_key,
                             'sistema_y': st.session_state.sis_y_key,
-                            'r0_x': r0_x_val, 'ia_x': ia_x_val, 'ip_x': ip_x_val, # <--- FALTABAN ESTAS
-                            'r0_y': r0_y_val, 'ia_y': ia_y_val, 'ip_y': ip_y_val  # <--- Y ESTAS
+                            'ia_x': ia_x_val, 'ip_x': ip_x_val,
+                            'ia_y': ia_y_val, 'ip_y': ip_y_val,
+                            'r0_x': r0_x_val, 'r0_y': r0_y_val
                         }
                         
                         pdf_bytes = create_pdf(report_params, info, direccion, df, img_stream)
