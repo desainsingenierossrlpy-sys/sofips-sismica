@@ -59,18 +59,16 @@ with st.sidebar:
     
     st.markdown("---")
 
-    # 2. CONTROLES DE DISEÑO
+    # CONTROLES DE DISEÑO
     if modulo == "Espectro de Diseño" and "Perú" in pais:
         norma = NormaE030()
         st.subheader("⚙️ Parámetros E.030")
         
-        # Inicializar estado
         if "zona_seleccionada" not in st.session_state: st.session_state["zona_seleccionada"] = 4
         if "u_val" not in st.session_state: st.session_state["u_val"] = 1.0
-        
         if "calculo_realizado" not in st.session_state: st.session_state["calculo_realizado"] = False
 
-        # --- ZONA, SUELO, USO ---
+        # ZONA, SUELO, USO
         zona = control_con_ayuda("Zona (Z)", [4, 3, 2, 1], "zona_key", "assets/mapa_zonas.png", index=0)
         if zona != st.session_state.zona_seleccionada:
              st.session_state.zona_seleccionada = zona
@@ -98,9 +96,7 @@ with st.sidebar:
                 st.session_state.ia_x = norma.irregularidad_altura[st.session_state.ia_x_key]
                 st.session_state.ip_x = norma.irregularidad_planta[st.session_state.ip_x_key]
 
-            # CORRECCIÓN: Ahora el Sistema usa control_con_ayuda para mostrar la tabla R0
             control_con_ayuda("Sistema X", list(norma.sistemas_estructurales.keys()), "sis_x_key", "assets/tabla_sistemas.png", index=5, on_change=upd_rx)
-            
             control_con_ayuda("Irreg. Altura", list(norma.irregularidad_altura.keys()), "ia_x_key", "assets/tabla_irregularidad_altura.png", index=0, on_change=upd_rx)
             control_con_ayuda("Irreg. Planta", list(norma.irregularidad_planta.keys()), "ip_x_key", "assets/tabla_irregularidad_planta.png", index=0, on_change=upd_rx)
             
@@ -118,9 +114,7 @@ with st.sidebar:
                 st.session_state.ia_y = norma.irregularidad_altura[st.session_state.ia_y_key]
                 st.session_state.ip_y = norma.irregularidad_planta[st.session_state.ip_y_key]
 
-            # CORRECCIÓN: Ahora el Sistema usa control_con_ayuda para mostrar la tabla R0
             control_con_ayuda("Sistema Y", list(norma.sistemas_estructurales.keys()), "sis_y_key", "assets/tabla_sistemas.png", index=5, on_change=upd_ry)
-            
             control_con_ayuda("Irreg. Altura Y", list(norma.irregularidad_altura.keys()), "ia_y_key", "assets/tabla_irregularidad_altura.png", index=0, on_change=upd_ry)
             control_con_ayuda("Irreg. Planta Y", list(norma.irregularidad_planta.keys()), "ip_y_key", "assets/tabla_irregularidad_planta.png", index=0, on_change=upd_ry)
             
@@ -136,7 +130,6 @@ with st.sidebar:
         factor_g = 9.81 if unidad == "m/s²" else 1.0
         label_eje = "Aceleración (m/s²)" if unidad == "m/s²" else "Aceleración (g)"
         
-        # BOTÓN DE CÁLCULO
         if st.button("🚀 Calcular", type="primary", use_container_width=True):
             st.session_state["calculo_realizado"] = True
 
@@ -146,12 +139,13 @@ with st.sidebar:
 logo_header = "assets/logo.png"
 if os.path.exists(logo_header):
     with open(logo_header, "rb") as f: img_b64 = base64.b64encode(f.read()).decode()
+    # Aumentado height a 120px para que el logo se vea GRANDE
     st.markdown(f"""
     <div style="display:flex; align-items:center; margin-bottom:20px;">
-        <img src="data:image/png;base64,{img_b64}" style="height:60px; margin-right:15px;">
+        <img src="data:image/png;base64,{img_b64}" style="height:120px; margin-right:25px;">
         <div>
-            <h2 style="margin:0; color:#2C3E50;">SOFIPS: Ingeniería Sísmica Avanzada</h2>
-            <p style="margin:0; color:gray;">Desarrollo: Ing. Arnold Mendo Rodriguez</p>
+            <h2 style="margin:0; color:#2C3E50; font-size: 32px;">SOFIPS: Ingeniería Sísmica Avanzada</h2>
+            <p style="margin:5px 0 0 0; color:gray; font-size: 16px;">Desarrollo: Ing. Arnold Mendo Rodriguez | Norma Peruana E.030 (2025)</p>
         </div>
     </div>
     <hr style="margin-top:0;">
