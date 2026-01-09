@@ -10,263 +10,250 @@ from ui.pdf_report import create_pdf
 from core.etabs_validator import EtabsValidator
 from core.norma_e030 import NormaE030
 
-st.set_page_config(page_title="SOFIPS | Suite Sísmica", layout="wide", page_icon="🏗️")
+# 1. Configuración (Sidebar expandido inicialmente)
+st.set_page_config(page_title="SOFIPS | Suite Sísmica", layout="wide", page_icon="🏗️", initial_sidebar_state="expanded")
 
+# CSS Global
 st.markdown("""
 <style>
 .st-emotion-cache-16cqk79, .leaflet-container, .leaflet-grab, .leaflet-interactive { cursor: crosshair !important; }
-.custom-metric { background-color: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 5px; padding: 8px; text-align: center; margin-bottom: 10px; }
-.metric-label { font-size: 12px; color: #666; margin: 0; text-transform: uppercase; font-weight: 600; }
-.metric-value { font-size: 18px; font-weight: bold; color: #2C3E50; margin: 0; }
-a.leaflet-control-zoom-in, a.leaflet-control-zoom-out, a.leaflet-control-layers-toggle { cursor: pointer !important; }
+.custom-metric { background-color: #f8f9fa; border-left: 5px solid #0055A4; padding: 10px; border-radius: 5px; text-align: center; margin-bottom: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.metric-label { font-size: 11px; color: #666; margin: 0; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; }
+.metric-value { font-size: 22px; font-weight: 800; color: #2C3E50; margin: 5px 0 0 0; }
+/* Ajuste para botones de ayuda alineados */
+div[data-testid="column"] { align-items: center; }
 </style>
 """, unsafe_allow_html=True)
 
-# Función auxiliar para mostrar ayuda
-def ayuda_visual(path, label):
-    with st.expander(f"👁️ Ver {label}"):
-        if os.path.exists(path):
-            st.image(path, use_container_width=True)
-        else:
-            st.warning(f"Falta imagen: {path}")
-
-# SISTEMA DE VENTANAS EMERGENTES (MODALES)
+# --- FUNCIONES DE AYUDA (MODALES) ---
 @st.dialog("📘 Referencia Normativa")
 def ver_imagen_grande(path, caption):
     if os.path.exists(path):
         st.image(path, caption=caption, use_container_width=True)
     else:
-        st.error(f"⚠️ No se encontró el archivo: {path}\n\nPor favor guarda la captura en la carpeta 'assets'.")
+        st.error(f"⚠️ Falta la imagen: {path}")
 
-def boton_ayuda(path, label, key_suffix):
-    if st.button(f"👁️ {label}", key=f"btn_{key_suffix}", help="Clic para ampliar"):
-        ver_imagen_grande(path, label)
+def control_con_ayuda(label_sel, opciones, key, path_img, index=0, on_change=None):
+    """Crea un selector y un botón de ayuda alineados horizontalmente"""
+    c1, c2 = st.columns([0.85, 0.15])
+    with c1:
+        val = st.selectbox(label_sel, opciones, index=index, key=key, on_change=on_change)
+    with c2:
+        st.write("") # Espaciador vertical
+        st.write("") 
+        if st.button("👁️", key=f"btn_{key}", help=f"Ver tabla de {label_sel}"):
+            ver_imagen_grande(path_img, label_sel)
+    return val
 
-# SIDEBAR
+# ---------------------------------------------------------
+# BARRA LATERAL (CONTROLES)
+# ---------------------------------------------------------
 with st.sidebar:
+    # Logo
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
         st.image(logo_path, use_container_width=True)
-    st.title("🎛️ Panel de Control")
+    
     st.markdown("---")
+    
+    # 1. Selector de País y Módulo
     manager = SeismicManager()
-    pais_seleccionado = st.selectbox("📍 Normativa / País", list(manager.available_codes.keys()))
-    st.markdown("### 🛠️ Herramientas")
-    modulo = st.radio("Seleccione módulo:", ["Espectro de Diseño", "Verificación E.030 (ETABS)"])
-    st.info("v3.0 Enterprise Cloud")
+    pais = st.selectbox("📍 Normativa", list(manager.available_codes.keys()))
+    modulo = st.radio("🛠️ Herramienta", ["Espectro de Diseño", "Verificación E.030"])
+    
+    st.markdown("---")
 
-# HEADER
+    # 2. CONTROLES DE DISEÑO (Solo si es Espectro)
+    if modulo == "Espectro de Diseño" and "Perú" in pais:
+        norma = NormaE030()
+        st.subheader("⚙️ Parámetros E.030")
+        
+        # Inicializar estado
+        if "zona_seleccionada" not in st.session_state: st.session_state["zona_seleccionada"] = 4
+        if "u_val" not in st.session_state: st.session_state["u_val"] = 1.0
+
+        # --- ZONA, SUELO, USO (Vertical y con ayuda al lado) ---
+        zona = control_con_ayuda("Zona (Z)", [4, 3, 2, 1], "zona_key", "assets/mapa_zonas.png", index=0)
+        # Forzar actualización si el mapa lo cambió
+        if zona != st.session_state.zona_seleccionada:
+             st.session_state.zona_seleccionada = zona
+        
+        suelo = control_con_ayuda("Perfil de Suelo (S)", list(norma.factor_S.keys()), "suelo_key", "assets/tabla_suelos.png", index=1)
+        
+        def update_u(): st.session_state.u_val = norma.categorias[st.session_state.cat_key]
+        cat_sel = control_con_ayuda("Categoría (U)", list(norma.categorias.keys()), "cat_key", "assets/tabla_categorias.png", index=2, on_change=update_u)
+        
+        u_final = st.number_input("Valor U (Editable)", value=st.session_state.u_val, format="%.2f", step=0.1)
+
+        st.markdown("---")
+        st.subheader("🏗️ Sistema Estructural (R)")
+        
+        tab_x, tab_y = st.tabs(["Dir X", "Dir Y"])
+        
+        # INICIALIZAR R
+        if "r0_x" not in st.session_state: 
+            for k in ["r0_x","ia_x","ip_x","r0_y","ia_y","ip_y"]: st.session_state[k] = 1.0
+            st.session_state["r0_x"] = 8.0; st.session_state["r0_y"] = 8.0
+
+        # DIR X
+        with tab_x:
+            def upd_rx(): 
+                st.session_state.r0_x = norma.sistemas_estructurales[st.session_state.sis_x_key]
+                st.session_state.ia_x = norma.irregularidad_altura[st.session_state.ia_x_key]
+                st.session_state.ip_x = norma.irregularidad_planta[st.session_state.ip_x_key]
+
+            st.selectbox("Sistema X", list(norma.sistemas_estructurales.keys()), key="sis_x_key", index=5, on_change=upd_rx)
+            st.selectbox("Irreg. Altura", list(norma.irregularidad_altura.keys()), key="ia_x_key", on_change=upd_rx)
+            st.selectbox("Irreg. Planta", list(norma.irregularidad_planta.keys()), key="ip_x_key", on_change=upd_rx)
+            
+            c_rx_in, c_rx_out = st.columns([1, 1])
+            r0_x_val = c_rx_in.number_input("R0 X", value=st.session_state.r0_x)
+            ia_x_val = st.session_state.ia_x
+            ip_x_val = st.session_state.ip_x
+            rx_final = r0_x_val * ia_x_val * ip_x_val
+            c_rx_out.metric("R Final", f"{rx_final:.2f}")
+
+        # DIR Y
+        with tab_y:
+            def upd_ry(): 
+                st.session_state.r0_y = norma.sistemas_estructurales[st.session_state.sis_y_key]
+                st.session_state.ia_y = norma.irregularidad_altura[st.session_state.ia_y_key]
+                st.session_state.ip_y = norma.irregularidad_planta[st.session_state.ip_y_key]
+
+            st.selectbox("Sistema Y", list(norma.sistemas_estructurales.keys()), key="sis_y_key", index=5, on_change=upd_ry)
+            st.selectbox("Irreg. Altura Y", list(norma.irregularidad_altura.keys()), key="ia_y_key", on_change=upd_ry)
+            st.selectbox("Irreg. Planta Y", list(norma.irregularidad_planta.keys()), key="ip_y_key", on_change=upd_ry)
+            
+            c_ry_in, c_ry_out = st.columns([1, 1])
+            r0_y_val = c_ry_in.number_input("R0 Y", value=st.session_state.r0_y)
+            ia_y_val = st.session_state.ia_y
+            ip_y_val = st.session_state.ip_y
+            ry_final = r0_y_val * ia_y_val * ip_y_val
+            c_ry_out.metric("R Final", f"{ry_final:.2f}")
+        
+        st.markdown("---")
+        unidad = st.radio("Unidades:", ["g", "m/s²"], horizontal=True)
+        factor_g = 9.81 if unidad == "m/s²" else 1.0
+        label_eje = "Aceleración (m/s²)" if unidad == "m/s²" else "Aceleración (g)"
+        
+        ejecutar = st.button("🚀 Calcular", type="primary", use_container_width=True)
+
+# ---------------------------------------------------------
+# ÁREA PRINCIPAL (RESULTADOS)
+# ---------------------------------------------------------
+
+# Título Header
 logo_header = "assets/logo.png"
 if os.path.exists(logo_header):
-    with open(logo_header, "rb") as f:
-        img_base64 = base64.b64encode(f.read()).decode()
-    header_html = f"""
-    <div style="display: flex; align-items: center; margin-bottom: 20px;">
-        <img src="data:image/png;base64,{img_base64}" style="width: 260px; max-width: 100%; margin-right: 20px;">
+    with open(logo_header, "rb") as f: img_b64 = base64.b64encode(f.read()).decode()
+    st.markdown(f"""
+    <div style="display:flex; align-items:center; margin-bottom:20px;">
+        <img src="data:image/png;base64,{img_b64}" style="height:60px; margin-right:15px;">
         <div>
-            <h3 style="margin: 0; color: #2C3E50; font-weight: bold; font-size: 28px; line-height: 1.2;">SOFIPS: Software informático de análisis y diseño sismorresistente</h3>
-            <p style="margin: 5px 0 0 0; color: gray; font-size: 16px;">Módulo Activo: <b>{modulo}</b> | Norma Peruana E.030 (2025)</p>
+            <h2 style="margin:0; color:#2C3E50;">SOFIPS: Ingeniería Sísmica Avanzada</h2>
+            <p style="margin:0; color:gray;">Desarrollo: Ing. Arnold Mendo Rodriguez</p>
         </div>
     </div>
-    """
-    st.markdown(header_html, unsafe_allow_html=True)
-    st.markdown("---")
-
-# INICIALIZAR ESTADO
-if "u_val" not in st.session_state: st.session_state["u_val"] = 1.0
-if "r0_x" not in st.session_state: st.session_state["r0_x"] = 8.0
-if "ia_x" not in st.session_state: st.session_state["ia_x"] = 1.0
-if "ip_x" not in st.session_state: st.session_state["ip_x"] = 1.0
-if "r0_y" not in st.session_state: st.session_state["r0_y"] = 8.0
-if "ia_y" not in st.session_state: st.session_state["ia_y"] = 1.0
-if "ip_y" not in st.session_state: st.session_state["ip_y"] = 1.0
+    <hr style="margin-top:0;">
+    """, unsafe_allow_html=True)
 
 if modulo == "Espectro de Diseño":
-    NormaClass = manager.get_norma_class(pais_seleccionado)
-    if NormaClass and "Perú" in pais_seleccionado:
+    
+    # 1. MAPA (Ancho Completo Arriba)
+    lat, lon, direccion, depto = mostrar_mapa_selector()
+    if lat:
+        st.success(f"📍 **Ubicación:** {direccion}")
+        # Lógica Automática Zona
+        MAPPING_ZONAS = {'TUMBES':4,'PIURA':4,'LAMBAYEQUE':4,'LA LIBERTAD':4,'ANCASH':4,'LIMA':4,'CALLAO':4,'ICA':4,'AREQUIPA':4,'MOQUEGUA':4,'TACNA':4,'CAJAMARCA':3,'SAN MARTIN':3,'HUANCAVELICA':3,'AYACUCHO':3,'APURIMAC':3,'PASCO':3,'JUNIN':3,'AMAZONAS':2,'HUANUCO':2,'UCAYALI':2,'CUSCO':2,'PUNO':2,'LORETO':1,'MADRE DE DIOS':1}
+        if depto:
+            if "last_depto" not in st.session_state or st.session_state["last_depto"] != depto:
+                st.session_state["last_depto"] = depto
+                st.session_state["zona_seleccionada"] = MAPPING_ZONAS.get(depto, 4)
+                st.rerun()
+
+    # 2. RESULTADOS (Si se ejecuta)
+    if ejecutar:
         norma = NormaE030()
         
-        col_izq, col_der = st.columns([1, 1.4], gap="large")
-
-        with col_izq:
-            lat, lon, direccion, depto = mostrar_mapa_selector()
-            if lat:
-                st.success(f"📍 **{direccion}**")
-                MAPPING_ZONAS = {'TUMBES':4,'PIURA':4,'LAMBAYEQUE':4,'LA LIBERTAD':4,'ANCASH':4,'LIMA':4,'CALLAO':4,'ICA':4,'AREQUIPA':4,'MOQUEGUA':4,'TACNA':4,'CAJAMARCA':3,'SAN MARTIN':3,'HUANCAVELICA':3,'AYACUCHO':3,'APURIMAC':3,'PASCO':3,'JUNIN':3,'AMAZONAS':2,'HUANUCO':2,'UCAYALI':2,'CUSCO':2,'PUNO':2,'LORETO':1,'MADRE DE DIOS':1}
-                if depto:
-                    if "last_depto" not in st.session_state or st.session_state["last_depto"] != depto:
-                        st.session_state["last_depto"] = depto
-                        st.session_state["zona_seleccionada"] = MAPPING_ZONAS.get(depto, 4)
-                        st.rerun()
-
-        with col_der:
-            st.subheader("⚙️ Parámetros de Diseño")
-            
-            # --- ZONA ---
-            c1, c2, c3 = st.columns(3)
-            if "zona_seleccionada" not in st.session_state: st.session_state["zona_seleccionada"] = 4
-            with c1:
-                zona = st.selectbox("Zona (Z)", [4, 3, 2, 1], key="zona_seleccionada")
-                # CORRECCIÓN: Apuntamos al archivo del MAPA
-                boton_ayuda("assets/mapa_zonas.png", "Mapa Zonas", "zona")
-
-            # --- SUELO ---
-            with c2:
-                suelo = st.selectbox("Suelo (S)", list(norma.factor_S.keys()), index=1)
-                boton_ayuda("assets/tabla_suelos.png", "Perfiles Suelo", "suelo")
-
-            # --- CATEGORIA ---
-            def update_u(): st.session_state.u_val = norma.categorias[st.session_state.cat_key]
-            with c3:
-                cat_sel = st.selectbox("Cat. (U)", list(norma.categorias.keys()), index=2, key="cat_key", on_change=update_u)
-                boton_ayuda("assets/tabla_categorias.png", "Categorías", "cat")
-            
-            st.write("**Factor U (Editable):**")
-            u_final = st.number_input("Valor U", value=st.session_state.u_val, format="%.2f", step=0.1, label_visibility="collapsed")
-            
-            boton_ayuda("assets/tabla_parametros_suelo.png", "Tabla Factores S, TP, TL", "params")
-
-            st.markdown("---")
-            st.write("🏗️ **Coeficientes de Reducción (R)**")
-
-            tabs_dir = st.tabs(["Dirección X-X", "Dirección Y-Y"])
-            
-            # === DIR X ===
-            with tabs_dir[0]:
-                def update_rx():
-                    st.session_state.r0_x = norma.sistemas_estructurales[st.session_state.sis_x_key]
-                    st.session_state.ia_x = norma.irregularidad_altura[st.session_state.ia_x_key]
-                    st.session_state.ip_x = norma.irregularidad_planta[st.session_state.ip_x_key]
-                
-                st.selectbox("Sistema Estructural X", list(norma.sistemas_estructurales.keys()), index=5, key="sis_x_key", on_change=update_rx)
-                boton_ayuda("assets/tabla_sistemas.png", "Tabla Sistemas (R0)", "sis_x")
-
-                c_ia, c_ip = st.columns(2)
-                with c_ia:
-                    st.selectbox("Irregularidad Altura (Ia)", list(norma.irregularidad_altura.keys()), key="ia_x_key", on_change=update_rx)
-                    boton_ayuda("assets/tabla_irregularidad_altura.png", "Tabla Ia", "ia_x")
-                with c_ip:
-                    st.selectbox("Irregularidad Planta (Ip)", list(norma.irregularidad_planta.keys()), key="ip_x_key", on_change=update_rx)
-                    boton_ayuda("assets/tabla_irregularidad_planta.png", "Tabla Ip", "ip_x")
-
-                st.markdown("**Valores de Cálculo (Editables):**")
-                cx1, cx2, cx3, cx4 = st.columns([1, 1, 1, 1.5])
-                r0_x_val = cx1.number_input("R0 X", value=st.session_state.r0_x, step=1.0)
-                ia_x_val = cx2.number_input("Ia X", value=st.session_state.ia_x, step=0.05)
-                ip_x_val = cx3.number_input("Ip X", value=st.session_state.ip_x, step=0.05)
-                rx_final = r0_x_val * ia_x_val * ip_x_val
-                cx4.metric("R Final (X)", f"{rx_final:.2f}")
-
-            # === DIR Y ===
-            with tabs_dir[1]:
-                def update_ry():
-                    st.session_state.r0_y = norma.sistemas_estructurales[st.session_state.sis_y_key]
-                    st.session_state.ia_y = norma.irregularidad_altura[st.session_state.ia_y_key]
-                    st.session_state.ip_y = norma.irregularidad_planta[st.session_state.ip_y_key]
-                
-                st.selectbox("Sistema Estructural Y", list(norma.sistemas_estructurales.keys()), index=5, key="sis_y_key", on_change=update_ry)
-                c_iay, c_ipy = st.columns(2)
-                with c_iay: st.selectbox("Irregularidad Altura (Ia)", list(norma.irregularidad_altura.keys()), key="ia_y_key", on_change=update_ry)
-                with c_ipy: st.selectbox("Irregularidad Planta (Ip)", list(norma.irregularidad_planta.keys()), key="ip_y_key", on_change=update_ry)
-                
-                st.markdown("**Valores de Cálculo (Editables):**")
-                cy1, cy2, cy3, cy4 = st.columns([1, 1, 1, 1.5])
-                r0_y_val = cy1.number_input("R0 Y", value=st.session_state.r0_y, step=1.0)
-                ia_y_val = cy2.number_input("Ia Y", value=st.session_state.ia_y, step=0.05)
-                ip_y_val = cy3.number_input("Ip Y", value=st.session_state.ip_y, step=0.05)
-                ry_final = r0_y_val * ia_y_val * ip_y_val
-                cy4.metric("R Final (Y)", f"{ry_final:.2f}")
-
-            st.markdown("---")
-            st.write("📏 **Unidades**")
-            unidad = st.radio("Output:", ["g", "m/s²"], horizontal=True, label_visibility="collapsed")
-            factor_g = 9.81 if unidad == "m/s²" else 1.0
-            label_eje = "Aceleración (m/s²)" if unidad == "m/s²" else "Aceleración (g)"
-
-            ejecutar = st.button("🚀 Calcular Espectros Combinados", type="primary", use_container_width=True)
-
-            if ejecutar:
-                input_params = {
-                    'zona': zona, 'suelo': suelo, 'categoria': cat_sel,
-                    'u_val': u_final, 'rx_val': rx_final, 'ry_val': ry_final,
-                    'r0_x': r0_x_val, 'r0_y': r0_y_val
-                }
-
-                Tx, Sa_x_des_raw, Sa_y_des_raw, Sa_el_raw, info = norma.get_spectrum_curve(input_params)
-
-                if info.get('Error'):
-                    st.error(info['Error'])
-                else:
-                    Sa_el = Sa_el_raw * factor_g
-                    Sa_x_des = Sa_x_des_raw * factor_g
-                    Sa_y_des = Sa_y_des_raw * factor_g
-
-                    st.markdown("### 📝 Resultados de Parámetros")
-                    p1, p2, p3, p4, p5 = st.columns(5)
-                    p1.markdown(f'<div class="custom-metric"><p class="metric-label">Z</p><p class="metric-value">{info["Z"]}g</p></div>', unsafe_allow_html=True)
-                    p2.markdown(f'<div class="custom-metric"><p class="metric-label">U</p><p class="metric-value">{info["U"]}</p></div>', unsafe_allow_html=True)
-                    p3.markdown(f'<div class="custom-metric"><p class="metric-label">S</p><p class="metric-value">{info["S"]}</p></div>', unsafe_allow_html=True)
-                    p4.markdown(f'<div class="custom-metric"><p class="metric-label">TP</p><p class="metric-value">{info["TP"]}s</p></div>', unsafe_allow_html=True)
-                    p5.markdown(f'<div class="custom-metric"><p class="metric-label">TL</p><p class="metric-value">{info["TL"]}s</p></div>', unsafe_allow_html=True)
-
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatter(x=Tx, y=Sa_el, mode='lines', line=dict(color='red', width=2, dash='dash'), name='Elástico (R=1)'))
-                    fig.add_trace(go.Scatter(x=Tx, y=Sa_x_des, mode='lines', fill='tonexty', fillcolor='rgba(255, 0, 0, 0.15)', line=dict(color='black', width=3), name=f'Diseño X (R={rx_final:.2f})'))
-                    fig.add_trace(go.Scatter(x=Tx, y=Sa_y_des, mode='lines', line=dict(color='blue', width=2), name=f'Diseño Y (R={ry_final:.2f})'))
-
-                    fig.update_layout(
-                        title=dict(text=f"<b>ESPECTRO {label_eje}</b>", font=dict(size=14)),
-                        xaxis=dict(title="Periodo T (s)", showgrid=True, gridcolor='lightgray'),
-                        yaxis=dict(title=label_eje, showgrid=True, gridcolor='lightgray'),
-                        template="plotly_white", height=450, hovermode="x unified",
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-
-                    with st.expander("📋 Descargas (PDF / Excel / ETABS)", expanded=True):
-                        df = pd.DataFrame({
-                            "T (s)": Tx,
-                            f"Sa Elástico ({unidad})": Sa_el,
-                            f"Sa Diseño X ({unidad})": Sa_x_des,
-                            f"Sa Diseño Y ({unidad})": Sa_y_des
-                        })
-                        st.dataframe(df, use_container_width=True, height=200)
-                        
-                        col_d1, col_d2, col_d3 = st.columns([1, 1, 1.5])
-                        
-                        txt_x = df.iloc[:, [0, 2]].to_csv(sep='\t', index=False, header=False).encode('utf-8')
-                        txt_y = df.iloc[:, [0, 3]].to_csv(sep='\t', index=False, header=False).encode('utf-8')
-                        
-                        col_d1.download_button(f"📥 ETABS X", txt_x, f"Espectro_X.txt", "text/plain")
-                        col_d2.download_button(f"📥 ETABS Y", txt_y, f"Espectro_Y.txt", "text/plain")
-                        
-                        img_bytes = fig.to_image(format="png", width=800, height=400, scale=2)
-                        img_stream = io.BytesIO(img_bytes)
-                        
-                        report_params = {
-                            'suelo': suelo, 'categoria': cat_sel, 
-                            'rx': rx_final, 'ry': ry_final, 
-                            'unidad': unidad, 'direccion': direccion,
-                            'sistema_x': st.session_state.sis_x_key,
-                            'sistema_y': st.session_state.sis_y_key,
-                            'ia_x': ia_x_val, 'ip_x': ip_x_val,
-                            'ia_y': ia_y_val, 'ip_y': ip_y_val,
-                            'r0_x': r0_x_val, 'r0_y': r0_y_val
-                        }
-                        
-                        pdf_bytes = create_pdf(report_params, info, direccion, df, img_stream)
-                        col_d3.download_button("📄 Reporte PDF", pdf_bytes, "Memoria_SOFIPS.pdf", "application/pdf", type="primary")
-
-    else:
-        st.warning(f"⚠️ El módulo para **{pais_seleccionado}** está en desarrollo.")
-
-elif modulo == "Verificación E.030 (ETABS)":
-    st.info("ℹ️ Sube tu Excel exportado de ETABS.")
-    uploaded_file = st.file_uploader("Archivo de Resultados (.xlsx)", type=["xlsx"])
-    if uploaded_file:
-        auditor = EtabsValidator(uploaded_file)
-        exito, msg = auditor.cargar_datos()
-        if exito:
-            st.success(msg)
+        # Override manual del usuario sobre el automático
+        if st.session_state.zona_seleccionada != zona:
+             # Si el usuario cambió el selectbox manualmente, usamos ese valor
+             zona_calc = zona
         else:
-            st.error(msg)
+             zona_calc = st.session_state.zona_seleccionada
+
+        input_params = {
+            'zona': zona_calc, 'suelo': suelo, 'categoria': cat_sel,
+            'u_val': u_final, 'rx_val': rx_final, 'ry_val': ry_final
+        }
+
+        Tx, Sa_x_des_raw, Sa_y_des_raw, Sa_el_raw, info = norma.get_spectrum_curve(input_params)
+
+        if info.get('Error'):
+            st.error(info['Error'])
+        else:
+            Sa_el = Sa_el_raw * factor_g
+            Sa_x_des = Sa_x_des_raw * factor_g
+            Sa_y_des = Sa_y_des_raw * factor_g
+
+            # PANEL DE RESULTADOS (ANCHO COMPLETO)
+            st.markdown("### 📊 Resultados del Análisis")
+            
+            # Fichas Técnicas
+            c1, c2, c3, c4, c5 = st.columns(5)
+            c1.markdown(f'<div class="custom-metric"><p class="metric-label">ZONA (Z)</p><p class="metric-value">{info["Z"]}g</p></div>', unsafe_allow_html=True)
+            c2.markdown(f'<div class="custom-metric"><p class="metric-label">USO (U)</p><p class="metric-value">{info["U"]}</p></div>', unsafe_allow_html=True)
+            c3.markdown(f'<div class="custom-metric"><p class="metric-label">SUELO (S)</p><p class="metric-value">{info["S"]}</p></div>', unsafe_allow_html=True)
+            c4.markdown(f'<div class="custom-metric"><p class="metric-label">TP</p><p class="metric-value">{info["TP"]}s</p></div>', unsafe_allow_html=True)
+            c5.markdown(f'<div class="custom-metric"><p class="metric-label">TL</p><p class="metric-value">{info["TL"]}s</p></div>', unsafe_allow_html=True)
+
+            # GRÁFICA GIGANTE
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=Tx, y=Sa_el, mode='lines', line=dict(color='red', width=2, dash='dash'), name='Elástico (R=1)'))
+            fig.add_trace(go.Scatter(x=Tx, y=Sa_x_des, mode='lines', fill='tonexty', fillcolor='rgba(255, 0, 0, 0.1)', line=dict(color='black', width=3), name=f'Diseño X (R={rx_final:.2f})'))
+            fig.add_trace(go.Scatter(x=Tx, y=Sa_y_des, mode='lines', line=dict(color='blue', width=2), name=f'Diseño Y (R={ry_final:.2f})'))
+
+            fig.update_layout(
+                title=dict(text=f"<b>ESPECTRO DE DISEÑO SÍSMICO ({label_eje})</b>", font=dict(size=18)),
+                xaxis=dict(title="Periodo T (s)", showgrid=True, gridcolor='#eee'),
+                yaxis=dict(title=label_eje, showgrid=True, gridcolor='#eee'),
+                template="plotly_white", 
+                height=600, # Gráfica más alta
+                hovermode="x unified",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+            # TABLAS Y DESCARGAS
+            col_tab, col_down = st.columns([2, 1])
+            
+            with col_tab:
+                st.write("📋 **Tabla de Valores**")
+                df = pd.DataFrame({"T(s)": Tx, f"Sa_Elas": Sa_el, f"Sa_X": Sa_x_des, f"Sa_Y": Sa_y_des})
+                st.dataframe(df, use_container_width=True, height=250)
+
+            with col_down:
+                st.write("💾 **Exportar Datos**")
+                txt_x = df.iloc[:, [0, 2]].to_csv(sep='\t', index=False, header=False).encode('utf-8')
+                txt_y = df.iloc[:, [0, 3]].to_csv(sep='\t', index=False, header=False).encode('utf-8')
+                
+                st.download_button(f"📥 TXT para ETABS (Dir X)", txt_x, f"Espectro_X.txt", "text/plain", use_container_width=True)
+                st.download_button(f"📥 TXT para ETABS (Dir Y)", txt_y, f"Espectro_Y.txt", "text/plain", use_container_width=True)
+                
+                img_bytes = fig.to_image(format="png", width=1000, height=500, scale=2)
+                img_stream = io.BytesIO(img_bytes)
+                
+                report_params = {
+                    'suelo': suelo, 'categoria': cat_sel, 
+                    'rx': rx_final, 'ry': ry_final, 
+                    'unidad': unidad, 'direccion': direccion,
+                    'sistema_x': st.session_state.sis_x_key,
+                    'sistema_y': st.session_state.sis_y_key,
+                    'r0_x': r0_x_val, 'ia_x': ia_x_val, 'ip_x': ip_x_val,
+                    'r0_y': r0_y_val, 'ia_y': ia_y_val, 'ip_y': ip_y_val
+                }
+                pdf_bytes = create_pdf(report_params, info, direccion, df, img_stream)
+                st.download_button("📄 Reporte Profesional PDF", pdf_bytes, "Memoria_SOFIPS.pdf", "application/pdf", type="primary", use_container_width=True)
+
+elif modulo == "Verificación E.030":
+    st.info("Módulo en construcción...")
