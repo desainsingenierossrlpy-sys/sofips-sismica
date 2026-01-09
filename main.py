@@ -10,7 +10,7 @@ from ui.pdf_report import create_pdf
 from core.etabs_validator import EtabsValidator
 from core.norma_e030 import NormaE030
 
-# 1. Configuración (Sidebar expandido inicialmente)
+# 1. Configuración
 st.set_page_config(page_title="SOFIPS | Suite Sísmica", layout="wide", page_icon="🏗️", initial_sidebar_state="expanded")
 
 # CSS Global
@@ -20,8 +20,8 @@ st.markdown("""
 .custom-metric { background-color: #f8f9fa; border-left: 5px solid #0055A4; padding: 10px; border-radius: 5px; text-align: center; margin-bottom: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 .metric-label { font-size: 11px; color: #666; margin: 0; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; }
 .metric-value { font-size: 22px; font-weight: 800; color: #2C3E50; margin: 5px 0 0 0; }
-/* Ajuste para botones de ayuda alineados */
-div[data-testid="column"] { align-items: center; }
+/* Ajuste para alinear verticalmente el botón de ojo en el sidebar */
+div[data-testid="stHorizontalBlock"] { align-items: end; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -34,14 +34,13 @@ def ver_imagen_grande(path, caption):
         st.error(f"⚠️ Falta la imagen: {path}")
 
 def control_con_ayuda(label_sel, opciones, key, path_img, index=0, on_change=None):
-    """Crea un selector y un botón de ayuda alineados horizontalmente"""
+    """Crea un selector y un botón de ayuda alineados en el sidebar"""
     c1, c2 = st.columns([0.85, 0.15])
     with c1:
         val = st.selectbox(label_sel, opciones, index=index, key=key, on_change=on_change)
     with c2:
-        st.write("") # Espaciador vertical
-        st.write("") 
-        if st.button("👁️", key=f"btn_{key}", help=f"Ver tabla de {label_sel}"):
+        # El CSS arriba alinea esto al fondo, así que no necesitamos espaciadores
+        if st.button("👁️", key=f"btn_{key}", help=f"Ver tabla normativa"):
             ver_imagen_grande(path_img, label_sel)
     return val
 
@@ -56,14 +55,14 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # 1. Selector de País y Módulo
+    # Selector de País y Módulo
     manager = SeismicManager()
     pais = st.selectbox("📍 Normativa", list(manager.available_codes.keys()))
     modulo = st.radio("🛠️ Herramienta", ["Espectro de Diseño", "Verificación E.030"])
     
     st.markdown("---")
 
-    # 2. CONTROLES DE DISEÑO (Solo si es Espectro)
+    # CONTROLES DE DISEÑO
     if modulo == "Espectro de Diseño" and "Perú" in pais:
         norma = NormaE030()
         st.subheader("⚙️ Parámetros E.030")
@@ -72,11 +71,9 @@ with st.sidebar:
         if "zona_seleccionada" not in st.session_state: st.session_state["zona_seleccionada"] = 4
         if "u_val" not in st.session_state: st.session_state["u_val"] = 1.0
 
-        # --- ZONA, SUELO, USO (Vertical y con ayuda al lado) ---
+        # 1. ZONA, SUELO, USO (Con Ayuda)
         zona = control_con_ayuda("Zona (Z)", [4, 3, 2, 1], "zona_key", "assets/mapa_zonas.png", index=0)
-        # Forzar actualización si el mapa lo cambió
-        if zona != st.session_state.zona_seleccionada:
-             st.session_state.zona_seleccionada = zona
+        if zona != st.session_state.zona_seleccionada: st.session_state.zona_seleccionada = zona
         
         suelo = control_con_ayuda("Perfil de Suelo (S)", list(norma.factor_S.keys()), "suelo_key", "assets/tabla_suelos.png", index=1)
         
@@ -95,16 +92,17 @@ with st.sidebar:
             for k in ["r0_x","ia_x","ip_x","r0_y","ia_y","ip_y"]: st.session_state[k] = 1.0
             st.session_state["r0_x"] = 8.0; st.session_state["r0_y"] = 8.0
 
-        # DIR X
+        # DIR X (Con Ayuda)
         with tab_x:
             def upd_rx(): 
                 st.session_state.r0_x = norma.sistemas_estructurales[st.session_state.sis_x_key]
                 st.session_state.ia_x = norma.irregularidad_altura[st.session_state.ia_x_key]
                 st.session_state.ip_x = norma.irregularidad_planta[st.session_state.ip_x_key]
 
-            st.selectbox("Sistema X", list(norma.sistemas_estructurales.keys()), key="sis_x_key", index=5, on_change=upd_rx)
-            st.selectbox("Irreg. Altura", list(norma.irregularidad_altura.keys()), key="ia_x_key", on_change=upd_rx)
-            st.selectbox("Irreg. Planta", list(norma.irregularidad_planta.keys()), key="ip_x_key", on_change=upd_rx)
+            # Aquí implementamos control_con_ayuda para los sistemas e irregularidades
+            control_con_ayuda("Sistema X", list(norma.sistemas_estructurales.keys()), "sis_x_key", "assets/tabla_sistemas.png", index=5, on_change=upd_rx)
+            control_con_ayuda("Irreg. Altura", list(norma.irregularidad_altura.keys()), "ia_x_key", "assets/tabla_irregularidad_altura.png", index=0, on_change=upd_rx)
+            control_con_ayuda("Irreg. Planta", list(norma.irregularidad_planta.keys()), "ip_x_key", "assets/tabla_irregularidad_planta.png", index=0, on_change=upd_rx)
             
             c_rx_in, c_rx_out = st.columns([1, 1])
             r0_x_val = c_rx_in.number_input("R0 X", value=st.session_state.r0_x)
@@ -113,16 +111,16 @@ with st.sidebar:
             rx_final = r0_x_val * ia_x_val * ip_x_val
             c_rx_out.metric("R Final", f"{rx_final:.2f}")
 
-        # DIR Y
+        # DIR Y (Con Ayuda)
         with tab_y:
             def upd_ry(): 
                 st.session_state.r0_y = norma.sistemas_estructurales[st.session_state.sis_y_key]
                 st.session_state.ia_y = norma.irregularidad_altura[st.session_state.ia_y_key]
                 st.session_state.ip_y = norma.irregularidad_planta[st.session_state.ip_y_key]
 
-            st.selectbox("Sistema Y", list(norma.sistemas_estructurales.keys()), key="sis_y_key", index=5, on_change=upd_ry)
-            st.selectbox("Irreg. Altura Y", list(norma.irregularidad_altura.keys()), key="ia_y_key", on_change=upd_ry)
-            st.selectbox("Irreg. Planta Y", list(norma.irregularidad_planta.keys()), key="ip_y_key", on_change=upd_ry)
+            control_con_ayuda("Sistema Y", list(norma.sistemas_estructurales.keys()), "sis_y_key", "assets/tabla_sistemas.png", index=5, on_change=upd_ry)
+            control_con_ayuda("Irreg. Altura Y", list(norma.irregularidad_altura.keys()), "ia_y_key", "assets/tabla_irregularidad_altura.png", index=0, on_change=upd_ry)
+            control_con_ayuda("Irreg. Planta Y", list(norma.irregularidad_planta.keys()), "ip_y_key", "assets/tabla_irregularidad_planta.png", index=0, on_change=upd_ry)
             
             c_ry_in, c_ry_out = st.columns([1, 1])
             r0_y_val = c_ry_in.number_input("R0 Y", value=st.session_state.r0_y)
@@ -139,10 +137,8 @@ with st.sidebar:
         ejecutar = st.button("🚀 Calcular", type="primary", use_container_width=True)
 
 # ---------------------------------------------------------
-# ÁREA PRINCIPAL (RESULTADOS)
+# ÁREA PRINCIPAL
 # ---------------------------------------------------------
-
-# Título Header
 logo_header = "assets/logo.png"
 if os.path.exists(logo_header):
     with open(logo_header, "rb") as f: img_b64 = base64.b64encode(f.read()).decode()
@@ -159,11 +155,9 @@ if os.path.exists(logo_header):
 
 if modulo == "Espectro de Diseño":
     
-    # 1. MAPA (Ancho Completo Arriba)
     lat, lon, direccion, depto = mostrar_mapa_selector()
     if lat:
         st.success(f"📍 **Ubicación:** {direccion}")
-        # Lógica Automática Zona
         MAPPING_ZONAS = {'TUMBES':4,'PIURA':4,'LAMBAYEQUE':4,'LA LIBERTAD':4,'ANCASH':4,'LIMA':4,'CALLAO':4,'ICA':4,'AREQUIPA':4,'MOQUEGUA':4,'TACNA':4,'CAJAMARCA':3,'SAN MARTIN':3,'HUANCAVELICA':3,'AYACUCHO':3,'APURIMAC':3,'PASCO':3,'JUNIN':3,'AMAZONAS':2,'HUANUCO':2,'UCAYALI':2,'CUSCO':2,'PUNO':2,'LORETO':1,'MADRE DE DIOS':1}
         if depto:
             if "last_depto" not in st.session_state or st.session_state["last_depto"] != depto:
@@ -171,13 +165,10 @@ if modulo == "Espectro de Diseño":
                 st.session_state["zona_seleccionada"] = MAPPING_ZONAS.get(depto, 4)
                 st.rerun()
 
-    # 2. RESULTADOS (Si se ejecuta)
     if ejecutar:
         norma = NormaE030()
         
-        # Override manual del usuario sobre el automático
         if st.session_state.zona_seleccionada != zona:
-             # Si el usuario cambió el selectbox manualmente, usamos ese valor
              zona_calc = zona
         else:
              zona_calc = st.session_state.zona_seleccionada
@@ -196,10 +187,8 @@ if modulo == "Espectro de Diseño":
             Sa_x_des = Sa_x_des_raw * factor_g
             Sa_y_des = Sa_y_des_raw * factor_g
 
-            # PANEL DE RESULTADOS (ANCHO COMPLETO)
             st.markdown("### 📊 Resultados del Análisis")
             
-            # Fichas Técnicas
             c1, c2, c3, c4, c5 = st.columns(5)
             c1.markdown(f'<div class="custom-metric"><p class="metric-label">ZONA (Z)</p><p class="metric-value">{info["Z"]}g</p></div>', unsafe_allow_html=True)
             c2.markdown(f'<div class="custom-metric"><p class="metric-label">USO (U)</p><p class="metric-value">{info["U"]}</p></div>', unsafe_allow_html=True)
@@ -207,7 +196,6 @@ if modulo == "Espectro de Diseño":
             c4.markdown(f'<div class="custom-metric"><p class="metric-label">TP</p><p class="metric-value">{info["TP"]}s</p></div>', unsafe_allow_html=True)
             c5.markdown(f'<div class="custom-metric"><p class="metric-label">TL</p><p class="metric-value">{info["TL"]}s</p></div>', unsafe_allow_html=True)
 
-            # GRÁFICA GIGANTE
             fig = go.Figure()
             fig.add_trace(go.Scatter(x=Tx, y=Sa_el, mode='lines', line=dict(color='red', width=2, dash='dash'), name='Elástico (R=1)'))
             fig.add_trace(go.Scatter(x=Tx, y=Sa_x_des, mode='lines', fill='tonexty', fillcolor='rgba(255, 0, 0, 0.1)', line=dict(color='black', width=3), name=f'Diseño X (R={rx_final:.2f})'))
@@ -218,13 +206,12 @@ if modulo == "Espectro de Diseño":
                 xaxis=dict(title="Periodo T (s)", showgrid=True, gridcolor='#eee'),
                 yaxis=dict(title=label_eje, showgrid=True, gridcolor='#eee'),
                 template="plotly_white", 
-                height=600, # Gráfica más alta
+                height=600,
                 hovermode="x unified",
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
             )
             st.plotly_chart(fig, use_container_width=True)
 
-            # TABLAS Y DESCARGAS
             col_tab, col_down = st.columns([2, 1])
             
             with col_tab:
