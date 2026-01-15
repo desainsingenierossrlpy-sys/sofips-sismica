@@ -2,138 +2,129 @@ import streamlit as st
 import folium
 from streamlit_folium import st_folium
 from geopy.geocoders import Nominatim
-import unidecode # Para quitar tildes (Junín -> Junin)
+import unidecode
 
-def mostrar_mapa_selector():
+def mostrar_mapa_selector(force_center=None, force_zoom=None):
     st.markdown("### 📍 Ubicación del Proyecto")
     
-    # 1. INICIALIZACIÓN
-    if "pin_lat" not in st.session_state:
+    # CSS: Solo para el cursor en cruz, quitamos el forzado de tamaño
+    st.markdown("""
+    <style>
+    .leaflet-container { cursor: crosshair !important; }
+    .leaflet-interactive { cursor: crosshair !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # 1. GESTIÓN DE COORDENADAS Y MEMORIA
+    if force_center:
+        st.session_state["map_center"] = force_center
+        st.session_state["pin_lat"] = force_center[0]
+        st.session_state["pin_lon"] = force_center[1]
+        if force_zoom: st.session_state["map_zoom"] = force_zoom
+        st.rerun()
+
+    # Inicialización por defecto
+    if "map_center" not in st.session_state:
+        st.session_state["map_center"] = [-9.19, -75.01] # Perú
+        st.session_state["map_zoom"] = 5
         st.session_state["pin_lat"] = -12.0464 # Lima
         st.session_state["pin_lon"] = -77.0428
-        st.session_state["map_zoom"] = 5
-        st.session_state["map_center"] = [-9.19, -75.01]
 
-    # 2. CREACIÓN DEL MAPA
+    # 2. CREAR MAPA (BASE ROBUSTA)
+    # IMPORTANTE: Usamos 'OpenStreetMap' por defecto para evitar pantalla blanca
     m = folium.Map(
         location=st.session_state["map_center"], 
         zoom_start=st.session_state["map_zoom"],
         control_scale=True,
-        tiles=None
+        tiles="OpenStreetMap" 
     )
 
-    # --- 3. CSS CURSOR ---
-    css_cursor = """
-    <style>
-        .leaflet-container, .leaflet-grab, .leaflet-interactive, .leaflet-dragging .leaflet-grab {
-            cursor: crosshair !important;
-        }
-    </style>
-    """
-    m.get_root().html.add_child(folium.Element(css_cursor))
-
-    # --- 4. GAMA DE MAPAS AMPLIADA ---
-    
-    # A. Google Híbrido (Default)
+    # 3. CAPAS DE GOOGLE (Overlay)
+    # Se añaden encima de OSM. Si fallan, al menos se ve el mapa base.
     folium.TileLayer(
         tiles='https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
-        attr='Google', name='Google Híbrido', overlay=False, control=True, show=True
+        attr='Google',
+        name='Google Híbrido',
+        overlay=False, # Si se selecciona, reemplaza base
+        control=True
     ).add_to(m)
 
-    # B. Esri Satélite (Mejor resolución en algunas zonas, sin letras)
-    folium.TileLayer(
-        tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        attr='Esri', name='Esri Satélite HD', overlay=False, control=True, show=False
-    ).add_to(m)
-
-    # C. Google Terreno
     folium.TileLayer(
         tiles='https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
-        attr='Google', name='Google Terreno', overlay=False, control=True, show=False
+        attr='Google',
+        name='Google Terreno',
+        overlay=False,
+        control=True
     ).add_to(m)
-
-    # D. Google Calles (Roadmap)
-    folium.TileLayer(
-        tiles='https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
-        attr='Google', name='Google Calles', overlay=False, control=True, show=False
-    ).add_to(m)
-
-    # E. Carto Dark (Modo oscuro profesional)
-    folium.TileLayer(
-        'CartoDB dark_matter', name='Modo Oscuro', overlay=False, control=True, show=False
-    ).add_to(m)
-
-    # --- 5. CAPA E.030 ---
-    geojson_url = "https://raw.githubusercontent.com/juaneladio/peru-geojson/master/peru_departamental_simple.geojson"
-
-    def style_function(feature):
-        dept = feature['properties']['NOMBDEP']
-        opacity = 0.15 
-        if dept in ['TUMBES', 'PIURA', 'LAMBAYEQUE', 'LA LIBERTAD', 'ANCASH', 'LIMA', 'CALLAO', 'ICA', 'AREQUIPA', 'MOQUEGUA', 'TACNA']:
-            return {'fillColor': '#FF0000', 'color': 'white', 'weight': 0.5, 'fillOpacity': opacity}
-        elif dept in ['CAJAMARCA', 'SAN MARTIN', 'HUANCAVELICA', 'AYACUCHO', 'APURIMAC', 'PASCO', 'JUNIN']:
-            return {'fillColor': '#FFD700', 'color': 'white', 'weight': 0.5, 'fillOpacity': opacity}
-        elif dept in ['AMAZONAS', 'HUANUCO', 'UCAYALI', 'CUSCO', 'PUNO']:
-            return {'fillColor': '#228B22', 'color': 'white', 'weight': 0.5, 'fillOpacity': opacity}
-        else:
-            return {'fillColor': '#ADFF2F', 'color': 'white', 'weight': 0.5, 'fillOpacity': opacity}
-
-    folium.GeoJson(
-        geojson_url, name="Zonas E.030 (Colores)", style_function=style_function, overlay=True, show=True
-    ).add_to(m)
-
-    folium.LayerControl(position='topright').add_to(m)
-
-    # 6. MARCADOR Y CARTELES
-    folium.Marker([st.session_state["pin_lat"], st.session_state["pin_lon"]], icon=folium.Icon(color="red", icon="crosshairs", prefix='fa')).add_to(m)
     
+    # 4. CAPA ZONAS E.030
+    try:
+        folium.GeoJson(
+            "https://raw.githubusercontent.com/juaneladio/peru-geojson/master/peru_departamental_simple.geojson",
+            name="Zonas E.030",
+            style_function=lambda x: {'fillColor': '#FF0000' if x['properties']['NOMBDEP'] == 'LIMA' else '#FFD700', 'color': 'white', 'weight': 0.5, 'fillOpacity': 0.15},
+            overlay=True, show=True
+        ).add_to(m)
+    except:
+        pass # Si falla internet, el mapa sigue funcionando
+
+    folium.LayerControl().add_to(m)
+
+    # 5. MARCADOR ROJO
+    folium.Marker(
+        [st.session_state["pin_lat"], st.session_state["pin_lon"]],
+        icon=folium.Icon(color="red", icon="crosshairs", prefix='fa'),
+        tooltip="Ubicación Seleccionada"
+    ).add_to(m)
+    
+    # Cartel Flotante
     m.get_root().html.add_child(folium.Element("""
-        <div style="position: fixed; top: 10px; left: 50px; width: 220px; background-color: white; border: 2px solid #d33; padding: 5px; z-index:9999; font-size:14px; text-align: center; border-radius: 5px; opacity: 0.9; cursor: default;">
+        <div style="position: fixed; top: 10px; left: 50px; width: 220px; background-color: white; border: 2px solid #d33; padding: 5px; z-index:9999; font-size:14px; text-align: center; border-radius: 5px; opacity: 0.9;">
             🎯 <b>Haz CLIC para ubicar</b>
         </div>
     """))
 
-    output = st_folium(m, width=None, height=750, center=st.session_state["map_center"], zoom=st.session_state["map_zoom"])
+    # 6. RENDERIZAR
+    # width=None asegura que se expanda al ancho de la columna
+    output = st_folium(m, width=None, height=650, center=st.session_state["map_center"], zoom=st.session_state["map_zoom"])
 
-    # 7. ACTUALIZACIÓN POSICIÓN
-    lat, lon, direccion, depto_detectado = st.session_state["pin_lat"], st.session_state["pin_lon"], "Calculando...", None
-
+    # 7. LOGICA DE CLIC
     if output and output.get('last_clicked'):
         clicked_lat = output['last_clicked']['lat']
         clicked_lon = output['last_clicked']['lng']
-        if clicked_lat != st.session_state["pin_lat"]:
+        
+        # Si la coordenada es diferente, actualizamos
+        if abs(clicked_lat - st.session_state["pin_lat"]) > 0.0001:
             st.session_state["pin_lat"] = clicked_lat
             st.session_state["pin_lon"] = clicked_lon
             st.rerun()
 
-    # 8. GEOCODING INTELIGENTE (Detectar Departamento)
-    key_cache = f"{lat}_{lon}"
+    # 8. OBTENER DATOS GEOGRÁFICOS
+    lat, lon = st.session_state["pin_lat"], st.session_state["pin_lon"]
+    direccion, depto_detectado = "Cargando...", None
+    
+    key_geo = f"{lat}_{lon}"
     if "geo_cache" not in st.session_state: st.session_state["geo_cache"] = {}
 
-    if key_cache in st.session_state["geo_cache"]:
-        data = st.session_state["geo_cache"][key_cache]
+    if key_geo in st.session_state["geo_cache"]:
+        data = st.session_state["geo_cache"][key_geo]
         direccion = data['dir']
-        depto_detectado = data['dept']
+        depto_detectado = data['dep']
     else:
         try:
-            geolocator = Nominatim(user_agent="sofips_v15")
+            geolocator = Nominatim(user_agent="sofips_v17")
             location = geolocator.reverse(f"{lat}, {lon}", zoom=10)
             if location:
                 direccion = location.address
-                # Extraer el estado/departamento del objeto raw
-                raw_addr = location.raw.get('address', {})
-                state = raw_addr.get('state', raw_addr.get('region', ''))
-                
-                # Limpieza de texto (Quitar "Departamento de", tildes, etc.)
+                raw = location.raw.get('address', {})
+                state = raw.get('state', raw.get('region', ''))
                 if state:
                     state = unidecode.unidecode(state).upper().replace("DEPARTAMENTO DE ", "").replace("REGION ", "").strip()
-                
                 depto_detectado = state
                 
-                # Guardar en caché
-                st.session_state["geo_cache"][key_cache] = {'dir': direccion, 'dept': depto_detectado}
+                st.session_state["geo_cache"][key_geo] = {'dir': direccion, 'dep': depto_detectado}
             else:
-                direccion = f"Lat: {lat:.4f}, Lon: {lon:.4f}"
+                direccion = f"{lat:.4f}, {lon:.4f}"
         except:
             direccion = "Sin conexión"
 
