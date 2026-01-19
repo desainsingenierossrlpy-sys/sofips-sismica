@@ -4,8 +4,7 @@ numpy
 plotly
 folium
 streamlit-folium
+fpdf2
+kaleido
 geopy
 unidecode
-openpyxl
-fpdf2
-kaleido==0.2.1
